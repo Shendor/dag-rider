@@ -1,0 +1,2 @@
+[workspace]
+members = ["model", "consensus", "network", "node", "vertex"]
