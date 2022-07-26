@@ -1,5 +1,5 @@
 # dag-rider
-Implementation of DAG-Rider protocol
+Implementation of DAG-Rider protocol for demonstration purpose.
 
 Original paper: https://arxiv.org/pdf/2102.08325v2.pdf
 
