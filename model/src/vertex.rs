@@ -1,98 +1,60 @@
-use std::collections::{BTreeMap, BTreeSet};
-use ed25519_dalek::{Signature};
+use std::collections::{BTreeMap};
 use std::fmt;
-use std::fmt::Display;
 use serde::{Deserialize, Serialize};
-use thiserror::private::DisplayAsDisplay;
 use crate::block::Block;
+use crate::committee::NodePublicKey;
 use crate::Round;
-use crate::staker::NodePublicKey;
 
 pub type VertexHash = [u8; 32];
 
 #[derive(Clone, Serialize, Deserialize, Default)]
-pub struct Header {
+pub struct Vertex {
     /// Vertex unique identifier
-    pub hash: VertexHash,
+    hash: VertexHash,
     /// source of the header (the node which created it)
-    pub owner: NodePublicKey,
-    pub block: Block,
-    pub parents: BTreeMap<VertexHash, Round>,
-    pub round: Round
+    owner: NodePublicKey,
+    block: Block,
+    parents: BTreeMap<VertexHash, Round>,
+    round: Round,
 }
 
-impl Header {
-    pub async fn new(
-        owner: NodePublicKey,
-        round: Round,
-        block: Block,
-        parents: BTreeMap<VertexHash, Round>
+impl Vertex {
+    pub fn new(owner: NodePublicKey,
+               round: Round,
+               block: Block,
+               parents: BTreeMap<VertexHash, Round>,
     ) -> Self {
-        let header = Self {
+        Self {
             owner,
             round,
             block,
             parents,
+            //TODO: compose a hash
             hash: VertexHash::default(),
-        };
-        Self {
-            hash: header.hash(),
-            ..header
         }
     }
 
-    fn hash(&self) -> VertexHash {
-        self.hash
-    }
-}
-
-impl fmt::Display for Header {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(
-            f,
-            "{}: Header - [{}, {}]",
-            self.round,
-            base64::encode(self.hash()),
-            base64::encode(self.owner),
-        )
-    }
-}
-
-impl fmt::Debug for Header {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "Header: {} - {}", self.round, base64::encode(self.hash()))
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct Vertex {
-    pub header: Header,
-    pub votes: Vec<NodePublicKey>,
-}
-
-impl Vertex {
     pub fn genesis(nodes: Vec<NodePublicKey>) -> Vec<Self> {
-        nodes.iter().map(|name| Self {
-            header: Header {
-                owner: *name,
-                ..Header::default()
-            },
-            votes: vec![],
-        }).collect()
+        nodes.iter().map(|owner| Vertex::new(*owner, 0, Block::default(), BTreeMap::new())).collect()
     }
 
-    pub fn get_strong_parents(&self) -> &BTreeMap<VertexHash, Round> {
-        self.header.parents.iter()
-            .filter(|(h, r)| self.is_previous_round(r))
-            .collect()
+    pub fn add_parent(&mut self, parent_vertex_hash: VertexHash, round: Round) {
+        self.parents.insert(parent_vertex_hash, round);
     }
 
-    pub fn get_all_parents(&self) -> &BTreeMap<VertexHash, Round> {
-        &self.header.parents
+    pub fn get_strong_parents(&self) -> BTreeMap<VertexHash, Round> {
+        self.parents.iter()
+            .filter(|(_, r)| self.is_previous_round(r))
+            .map(|(h, r)| (h.clone(), r.clone()))
+            .collect::<BTreeMap<VertexHash, Round>>()
+    }
+
+    pub fn get_all_parents(&self) -> BTreeMap<VertexHash, Round> {
+        self.parents.clone()
     }
 
     pub fn is_weak_parent(&self, vertex_hash: &VertexHash) -> bool {
-        match self.header.parents.get(vertex_hash) {
+        match self.parents.get(vertex_hash) {
             // difference between round of parent vertex and current round should not be 1
             Some(r) => !self.is_previous_round(r),
             None => false
@@ -100,19 +62,23 @@ impl Vertex {
     }
 
     fn is_previous_round(&self, previous_round: &Round) -> bool {
-        self.header.round - previous_round == 1
+        self.round - previous_round == 1
     }
 
     pub fn round(&self) -> Round {
-        self.header.round
+        self.round
+    }
+
+    pub fn parents(&self) -> &BTreeMap<VertexHash, Round> {
+        &self.parents
     }
 
     pub fn owner(&self) -> NodePublicKey {
-        self.header.owner
+        self.owner
     }
 
     pub fn hash(&self) -> VertexHash {
-        self.header.hash()
+        self.hash
     }
 }
 
@@ -136,6 +102,6 @@ impl fmt::Debug for Vertex {
 
 impl PartialEq for Vertex {
     fn eq(&self, other: &Self) -> bool {
-        self.header.hash == other.header.hash
+        self.hash == other.hash
     }
 }

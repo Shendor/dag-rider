@@ -1,15 +1,13 @@
+use std::net::SocketAddr;
+
 use anyhow::{Context, Result};
 use bytes::BufMut as _;
 use bytes::BytesMut;
-use clap::{crate_name, crate_version, App, AppSettings};
+use clap::{App, AppSettings, crate_name, crate_version};
 use env_logger::Env;
-use futures::future::join_all;
 use futures::sink::SinkExt as _;
-use log::{info, warn};
-use rand::Rng;
-use std::net::SocketAddr;
+use log::{info};
 use tokio::net::TcpStream;
-use tokio::time::{interval, sleep, Duration, Instant};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 #[tokio::main]
@@ -56,22 +54,20 @@ impl Client {
             .await
             .context(format!("failed to connect to {}", self.target))?;
 
-        let transaction_count = TRANSACTION_COUNT;
         let mut tx = BytesMut::with_capacity(TX_SIZE);
-        let mut counter = 0;
         let mut transport = Framed::new(stream, LengthDelimitedCodec::new());
 
         info!("Start sending transactions");
 
-        for x in 0..TRANSACTION_COUNT {
-            info!("Sending sample transaction {}", counter);
+        for c in 0..TRANSACTION_COUNT {
+            info!("Sending sample transaction {}", c);
 
             tx.put_u8(0u8); // Sample txs start with 0.
             tx.put_u64(1); // This counter identifies the tx.
             tx.resize(TX_SIZE, 0u8);
             let bytes = tx.split().freeze();
 
-            transport.send(bytes).await;
+            transport.send(bytes).await?;
         }
 
         Ok(())

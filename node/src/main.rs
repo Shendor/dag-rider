@@ -1,14 +1,14 @@
-use std::collections::HashMap;
-use std::process::id;
-use anyhow::{Context, Result};
+use anyhow::{Result};
 use clap::{App, AppSettings, ArgMatches, SubCommand};
 use env_logger::Env;
 use log::info;
 use tokio::sync::mpsc::{channel, Receiver};
+
 use consensus::Consensus;
-use model::config::Parameters;
-use model::staker::{Id, InitialStakers, NodePublicKey};
+use model::block::Block;
+use model::committee::{Committee, Id};
 use model::vertex::Vertex;
+use transaction::TransactionCoordinator;
 use vertex::vertex_coordinator::VertexCoordinator;
 
 pub const DEFAULT_CHANNEL_CAPACITY: usize = 1000;
@@ -47,38 +47,47 @@ async fn main() -> Result<()> {
 }
 
 async fn run(matches: &ArgMatches<'_>) -> Result<()> {
-    let stakers = InitialStakers::new();
-    let stakers_keys = stakers.stakers.iter().map(|v| v.1.public_key.clone()).collect::<Vec<NodePublicKey>>();
-    let id = matches.value_of("id").unwrap().parse::<Id>().unwrap();
-    // let committee = Committee::new();
-    let parameters = Parameters::new();
-    // let storage = HashMap::new();
+    let node_id = matches.value_of("id").unwrap().parse::<Id>().unwrap();
 
     let (vertex_output_sender, vertex_output_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
 
     match matches.subcommand() {
         ("vertex_coordinator", _) => {
-            let (vertex_sender, vertex_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
+            let (vertex_to_broadcast_sender, vertex_to_broadcast_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
+            let (vertex_to_consensus_sender, vertex_to_consensus_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
+            let (block_sender, block_receiver) = channel::<Block>(DEFAULT_CHANNEL_CAPACITY);
 
             VertexCoordinator::spawn(
-                stakers.get(id).unwrap().clone(),
-                parameters.clone(),
-                vertex_sender,
+                node_id,
+                Committee::default(),
+                vertex_to_consensus_sender,
+                vertex_to_broadcast_receiver
             );
+
+            TransactionCoordinator::spawn(
+                node_id,
+                Committee::default(),
+                block_sender
+            );
+
             Consensus::spawn(
-                stakers_keys,
-                vertex_receiver,
-                vertex_output_sender
+                node_id,
+                Committee::default(),
+                vertex_to_consensus_receiver,
+                vertex_to_broadcast_sender,
+                vertex_output_sender,
+                block_receiver
             );
         }
         _ => unreachable!(),
     }
+
     wait_and_print_vertexs(vertex_output_receiver).await;
     unreachable!();
 }
 
-async fn wait_and_print_vertexs(mut rx_output: Receiver<Vertex>) {
-    while let Some(vertex) = rx_output.recv().await {
-        info!("{}", vertex)
+async fn wait_and_print_vertexs(mut vertex_output_receiver: Receiver<Vertex>) {
+    while let Some(vertex) = vertex_output_receiver.recv().await {
+        info!("Vertex committed: {}", vertex)
     }
 }

@@ -1,12 +1,10 @@
 use std::collections::{BTreeMap, HashMap};
-use std::fmt::format;
-use std::hash::Hash;
+use model::committee::NodePublicKey;
 use model::Round;
-use model::staker::NodePublicKey;
 use model::vertex::{Vertex, VertexHash};
 
 pub struct Dag {
-    pub graph: HashMap<Round, HashMap<NodePublicKey, Vertex>>,
+    pub graph: BTreeMap<Round, HashMap<NodePublicKey, Vertex>>,
     min_quorum: u32,
 }
 
@@ -29,6 +27,22 @@ impl Dag {
             .insert(vertex.owner(), vertex);
     }
 
+    pub fn contains_vertices(&self, vertices: &BTreeMap<VertexHash, Round>) -> bool {
+        vertices.iter().all(|(vertex_hash, round)| {
+            match self.graph.get(round) {
+                Some(v) => v.values().any(|vertex| vertex.hash() == *vertex_hash),
+                None => false
+            }
+        })
+    }
+
+    pub fn get_vertices(&self, round: &Round) -> BTreeMap<VertexHash, Round> {
+        match self.graph.get(round) {
+            Some(v) => v.iter().map(|(_, v)| { (v.hash(), v.round()) }).collect(),
+            None => BTreeMap::default()
+        }
+    }
+
     pub fn is_quorum_reached_for_round(&self, round: &Round) -> bool {
         match self.graph.get(round) {
             Some(v) => v.len() as u32 >= self.min_quorum,
@@ -38,7 +52,7 @@ impl Dag {
 
     pub fn is_linked_with_others_in_round(&self, vertex: &Vertex, round: Round) -> bool {
         let mut weight = 0;
-        for v in self.graph.get(&round).unwrap().values().iter() {
+        for v in self.graph.get(&round).unwrap().values() {
             if self.is_strongly_linked(vertex, v) {
                 weight += 1;
             }
@@ -47,27 +61,36 @@ impl Dag {
     }
 
     pub fn is_strongly_linked(&self, v1: &Vertex, v2: &Vertex) -> bool {
-        self.is_linked_internal(v1, v2, |v: &Vertex| -> &BTreeMap<VertexHash, Round> { v.get_strong_parents() })
+        self.is_linked_internal(v1, v2, |v: &Vertex| -> BTreeMap<VertexHash, Round> { v.get_strong_parents() })
     }
 
     pub fn is_linked(&self, v1: &Vertex, v2: &Vertex) -> bool {
-        self.is_linked_internal(v1, v2, |v: &Vertex| -> &BTreeMap<VertexHash, Round> { v.get_all_parents() })
+        self.is_linked_internal(v1, v2, |v: &Vertex| -> BTreeMap<VertexHash, Round> { v.get_all_parents() })
     }
 
-    fn is_linked_internal(&self, v1: &Vertex, v2: &Vertex, get_parents: fn(&Vertex) -> &BTreeMap<VertexHash, Round>) -> bool {
+    fn is_linked_internal(&self, v1: &Vertex, v2: &Vertex, get_parents: fn(&Vertex) -> BTreeMap<VertexHash, Round>) -> bool {
         if v1.round() > v2.round() {
             let mut vertex_stack = vec![v1];
             while !vertex_stack.is_empty() {
                 let vertex = vertex_stack.pop().unwrap();
                 for (parent, round) in get_parents(vertex) {
-                    if *parent == v2.hash() {
+                    if parent == v2.hash() {
                         return true;
-                    } else if *round > v2.Round {
-                        vertex_stack.push(to)
+                    } else if round > v2.round() {
+                        if let Some(parent_vertex) = self.get_vertex(parent, &round) {
+                            vertex_stack.push(parent_vertex)
+                        }
                     }
                 }
             }
         }
         false
+    }
+
+    pub fn get_vertex(&self, vertex_hash: VertexHash, round: &Round) -> Option<&Vertex> {
+        match self.graph.get(round) {
+            Some(v) => v.values().find(|vertex| vertex.hash() == vertex_hash),
+            None => None
+        }
     }
 }
