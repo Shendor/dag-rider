@@ -12,7 +12,6 @@ use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // --size 32 --rate 1 --nodes 127.0.0.1:1234
     let matches = App::new(crate_name!())
         .version(crate_version!())
         .args_from_usage("<ADDR> 'The network address of the node where to send txs'")
@@ -48,7 +47,7 @@ struct Client {
 
 impl Client {
     pub async fn send(&self) -> Result<()> {
-        const TRANSACTION_COUNT: u64 = 10;
+        const TRANSACTION_COUNT: u64 = 40;
         const TX_SIZE: usize = 64;
 
         let stream = TcpStream::connect(self.target)

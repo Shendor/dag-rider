@@ -40,7 +40,7 @@ impl Vertex {
     }
 
     pub fn genesis(nodes: Vec<NodePublicKey>) -> Vec<Self> {
-        nodes.iter().map(|owner| Vertex::new(*owner, 0, Block::default(), BTreeMap::new())).collect()
+        nodes.iter().map(|owner| Vertex::new(*owner, 1, Block::default(), BTreeMap::new())).collect()
     }
 
     pub fn add_parent(&mut self, parent_vertex_hash: VertexHash, round: Round) {

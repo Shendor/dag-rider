@@ -66,6 +66,7 @@ impl Consensus {
                     // and remove from the buffer those added
                     self.buffer.retain(|v| {
                         if v.round() <= self.state.current_round && self.state.dag.contains_vertices(v.parents()) {
+                        // if v.round() <= self.state.current_round {
                             self.state.dag.insert_vertex(v.clone());
                             false
                         } else {
@@ -86,18 +87,17 @@ impl Consensus {
                     info!("Finished the last round {:?} in the wave. Start to order vertices", self.state.current_round);
                     let ordered_vertices = self.get_ordered_vertices(self.state.current_round / MAX_WAVE);
 
+                    info!("Got {} vertices to order", ordered_vertices.len());
                     for vertex in ordered_vertices {
                         self.vertex_output_sender
                             .send(vertex.clone())
                             .await
                             .expect("Failed to output vertex");
-
-                        self.vertex_output_sender.send(vertex).await.unwrap();
                     }
                 }
                 // when quorum for the round reached, then go to the next round
                 self.state.current_round += 1;
-                info!("DAG goes to the next round {:?}", self.state.current_round);
+                info!("DAG goes to the next round {:?} \n{}", self.state.current_round, self.state.dag);
                 let new_vertex = self.create_new_vertex(self.state.current_round).await.unwrap();
 
                 info!("Broadcast the new vertex {}", new_vertex);
@@ -109,20 +109,23 @@ impl Consensus {
     async fn create_new_vertex(&mut self, round: Round) -> Option<Vertex> {
         let block = self.blocks_to_propose.pop().unwrap();
         info!("Start to create a new vertex with the block and {} transactions", block.transactions.len());
-        let parents = self.state.dag.get_vertices(&round);
+        let parents = self.state.dag.get_vertices(&(round - 1));
         let mut vertex = Vertex::new(
             self.committee.get_node_key(self.node_id).unwrap(),
             round,
             block,
             parents,
         );
-        self.set_weak_edges(&mut vertex, round);
+
+        if round > 2 {
+            self.set_weak_edges(&mut vertex, round);
+        }
 
         return Some(vertex);
     }
 
     fn set_weak_edges(&self, vertex: &mut Vertex, round: Round) {
-        for r in (round - 2..1).rev() {
+        for r in (1..round - 2).rev() {
             if let Some(vertices) = self.state.dag.graph.get(&r) {
                 for (_, v) in vertices {
                     if !self.state.dag.is_linked(&vertex, v) {
@@ -135,13 +138,17 @@ impl Consensus {
 
     fn get_ordered_vertices(&mut self, wave: Wave) -> Vec<Vertex> {
         if let Some(leader) = self.get_wave_vertex_leader(wave) {
+            debug!("Selected a vertex leader: {}", leader);
             // we need to make sure that if one correct process commits the wave
             // vertex leader 𝑣, then all the other correct processes will commit 𝑣
             // later. To this end, we use standard quorum intersection. Process 𝑝𝑖
             // commits the wave 𝑤 vertex leader 𝑣 if:
-            if self.state.dag.is_linked_with_others_in_round(leader, self.get_round_for_wave(wave, MAX_WAVE)) {
+            let round = self.get_round_for_wave(wave, MAX_WAVE);
+            if self.state.dag.is_linked_with_others_in_round(leader, round) {
+                debug!("The leader is strongly linked to others in the round {}", round);
                 let mut leaders_to_commit = self.get_leaders_to_commit(wave - 1, leader);
                 self.decided_wave = wave;
+                debug!("Set decided wave to {}", wave);
 
                 // go through the un-committed leaders starting from the oldest one
                 return self.order_vertices(&mut leaders_to_commit);
@@ -154,16 +161,19 @@ impl Consensus {
         let mut to_commit = vec![current_leader.clone()];
         let mut current_leader = current_leader;
 
-        // Go for each wave up until decided_wave and find which leaders we need to commit
-        for wave in (self.decided_wave + 1..from_wave).rev()
-        {
-            // Get the vertex proposed in the previous wave.
-            if let Some(prev_leader) = self.get_wave_vertex_leader(wave) {
-                // if no strong link between leaders then skip for this wave
-                // and maybe next time there will be a strong link
-                if self.state.dag.is_strongly_linked(current_leader, prev_leader) {
-                    to_commit.push(prev_leader.clone());
-                    current_leader = prev_leader;
+        if from_wave > 0 {
+            // Go for each wave up until decided_wave and find which leaders we need to commit
+            for wave in (from_wave..self.decided_wave + 1).rev()
+            {
+                // Get the vertex proposed in the previous wave.
+                debug!("Get the vertex proposed in the previous wave.");
+                if let Some(prev_leader) = self.get_wave_vertex_leader(wave) {
+                    // if no strong link between leaders then skip for this wave
+                    // and maybe next time there will be a strong link
+                    if self.state.dag.is_strongly_linked(current_leader, prev_leader) {
+                        to_commit.push(prev_leader.clone());
+                        current_leader = prev_leader;
+                    }
                 }
             }
         }
@@ -181,7 +191,7 @@ impl Consensus {
                 if *round > 0 {
                     for vertex in vertices.values() {
                         let vertex_hash = vertex.hash();
-                        if !self.delivered_vertices.contains(&vertex_hash) && self.state.dag.is_linked(&leader, vertex) {
+                        if !self.delivered_vertices.contains(&vertex_hash) && self.state.dag.is_linked(vertex, &leader) {
                             ordered_vertices.push(vertex.clone());
                             self.delivered_vertices.insert(vertex_hash);
                         }

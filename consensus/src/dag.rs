@@ -1,4 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
+use std::fmt::{Display, format, Formatter};
+use std::ops::Add;
 use model::committee::NodePublicKey;
 use model::Round;
 use model::vertex::{Vertex, VertexHash};
@@ -53,30 +55,30 @@ impl Dag {
     pub fn is_linked_with_others_in_round(&self, vertex: &Vertex, round: Round) -> bool {
         let mut weight = 0;
         for v in self.graph.get(&round).unwrap().values() {
-            if self.is_strongly_linked(vertex, v) {
+            if self.is_strongly_linked(v, vertex) {
                 weight += 1;
             }
         }
         weight >= self.min_quorum
     }
 
-    pub fn is_strongly_linked(&self, v1: &Vertex, v2: &Vertex) -> bool {
-        self.is_linked_internal(v1, v2, |v: &Vertex| -> BTreeMap<VertexHash, Round> { v.get_strong_parents() })
+    pub fn is_strongly_linked(&self, newest: &Vertex, oldest: &Vertex) -> bool {
+        self.is_linked_internal(newest, oldest, |v: &Vertex| -> BTreeMap<VertexHash, Round> { v.get_strong_parents() })
     }
 
-    pub fn is_linked(&self, v1: &Vertex, v2: &Vertex) -> bool {
-        self.is_linked_internal(v1, v2, |v: &Vertex| -> BTreeMap<VertexHash, Round> { v.get_all_parents() })
+    pub fn is_linked(&self, newest: &Vertex, oldest: &Vertex) -> bool {
+        self.is_linked_internal(newest, oldest, |v: &Vertex| -> BTreeMap<VertexHash, Round> { v.get_all_parents() })
     }
 
-    fn is_linked_internal(&self, v1: &Vertex, v2: &Vertex, get_parents: fn(&Vertex) -> BTreeMap<VertexHash, Round>) -> bool {
-        if v1.round() > v2.round() {
-            let mut vertex_stack = vec![v1];
+    fn is_linked_internal(&self, newest: &Vertex, oldest: &Vertex, get_parents: fn(&Vertex) -> BTreeMap<VertexHash, Round>) -> bool {
+        if newest.round() > oldest.round() {
+            let mut vertex_stack = vec![newest];
             while !vertex_stack.is_empty() {
                 let vertex = vertex_stack.pop().unwrap();
                 for (parent, round) in get_parents(vertex) {
-                    if parent == v2.hash() {
+                    if parent == oldest.hash() {
                         return true;
-                    } else if round > v2.round() {
+                    } else if round > oldest.round() {
                         if let Some(parent_vertex) = self.get_vertex(parent, &round) {
                             vertex_stack.push(parent_vertex)
                         }
@@ -92,5 +94,40 @@ impl Dag {
             Some(v) => v.values().find(|vertex| vertex.hash() == vertex_hash),
             None => None
         }
+    }
+}
+
+impl Display for Dag {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut vertex_ids = HashMap::new();
+        for (r, vertices) in &self.graph {
+            let mut line = format!("{}: ", r.to_string());
+
+            let mut c = 1;
+            for (_, vertex) in vertices {
+                vertex_ids.insert(vertex.hash(), c);
+
+                let mut parents_line = String::new();
+                for (hash, round) in vertex.parents() {
+                    if let Some(id) = vertex_ids.get(hash) {
+                        parents_line.push_str(format!(" {}-{}", round, id).as_str());
+                    }
+                }
+
+                if parents_line.is_empty() {
+                    line.push_str(format!("(V{})", c).as_str());
+                } else {
+                    line.push_str(format!("(V{})[{} ]", c, parents_line).as_str());
+                }
+                if c < vertices.len() {
+                    line.push_str(" --- ");
+                }
+
+                c += 1;
+            }
+            line.push_str("\n");
+            write!(f, "{}", line);
+        }
+        Ok(())
     }
 }
