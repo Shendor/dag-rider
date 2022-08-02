@@ -12,12 +12,13 @@ use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // --size 32 --rate 1 --nodes 127.0.0.1:1234
     let matches = App::new(crate_name!())
         .version(crate_version!())
         .args_from_usage("<ADDR> 'The network address of the node where to send txs'")
-        .args_from_usage("--size=<INT> 'The size of each transaction in bytes'")
-        .args_from_usage("--rate=<INT> 'The rate (txs/s) at which to send the transactions'")
-        .args_from_usage("--nodes=[ADDR]... 'Network addresses that must be reachable before starting the benchmark.'")
+        // .args_from_usage("--size=<INT> 'The size of each transaction in bytes'")
+        // .args_from_usage("--rate=<INT> 'The rate (txs/s) at which to send the transactions'")
+        // .args_from_usage("--nodes=[ADDR]... 'Network addresses that must be reachable before starting the benchmark.'")
         .setting(AppSettings::ArgRequiredElseHelp)
         .get_matches();
 
@@ -47,7 +48,7 @@ struct Client {
 
 impl Client {
     pub async fn send(&self) -> Result<()> {
-        const TRANSACTION_COUNT: u64 = 1;
+        const TRANSACTION_COUNT: u64 = 10;
         const TX_SIZE: usize = 64;
 
         let stream = TcpStream::connect(self.target)
@@ -63,8 +64,8 @@ impl Client {
             info!("Sending sample transaction {}", c);
 
             tx.put_u8(0u8); // Sample txs start with 0.
-            tx.put_u64(1); // This counter identifies the tx.
-            tx.resize(TX_SIZE, 0u8);
+            tx.put_u64(c); // This counter identifies the tx.
+            // tx.resize(TX_SIZE, 0u8);
             let bytes = tx.split().freeze();
 
             transport.send(bytes).await?;

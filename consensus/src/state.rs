@@ -20,7 +20,7 @@ impl State {
             .collect::<HashMap<_, _>>();
 
         Self {
-            current_round: 0,
+            current_round: 1,
             delivered_vertices: genesis.iter().map(|(_, v)| v.hash()).collect(),
             dag: Dag::new(genesis_vertices.clone(), min_quorum),
         }

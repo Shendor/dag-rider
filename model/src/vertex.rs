@@ -24,13 +24,18 @@ impl Vertex {
                block: Block,
                parents: BTreeMap<VertexHash, Round>,
     ) -> Self {
-        Self {
+        let vertex = Self {
             owner,
             round,
             block,
             parents,
-            //TODO: compose a hash
             hash: VertexHash::default(),
+        };
+        let encoded = bincode::serialize(&vertex).unwrap();
+        let hash = blake3::hash(&encoded).as_bytes().clone();
+        Self {
+            hash,
+            ..vertex
         }
     }
 
@@ -61,10 +66,6 @@ impl Vertex {
         }
     }
 
-    fn is_previous_round(&self, previous_round: &Round) -> bool {
-        self.round - previous_round == 1
-    }
-
     pub fn round(&self) -> Round {
         self.round
     }
@@ -80,23 +81,33 @@ impl Vertex {
     pub fn hash(&self) -> VertexHash {
         self.hash
     }
+
+    fn is_previous_round(&self, previous_round: &Round) -> bool {
+        self.round - previous_round == 1
+    }
 }
 
 impl fmt::Display for Vertex {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(
             f,
-            "{}: Vertex - [{}, {}]",
+            "Vertex ({}, {}) [owner: {}]",
             self.round(),
-            base64::encode(self.owner()),
-            base64::encode(self.hash())
+            base64::encode(self.hash()),
+            base64::encode(self.owner())
         )
     }
 }
 
 impl fmt::Debug for Vertex {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "Vertex: {} - {}", self.round(), base64::encode(self.owner()))
+        write!(
+            f,
+            "Vertex ({}, {}) [owner: {}]",
+            self.round(),
+            base64::encode(self.hash()),
+            base64::encode(self.owner())
+        )
     }
 }
 

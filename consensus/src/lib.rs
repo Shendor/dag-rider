@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use log::{debug};
+use log::{debug, info};
 use tokio::sync::mpsc::{Receiver, Sender};
 
 use model::{Round, Wave};
@@ -21,6 +21,7 @@ pub struct Consensus {
     state: State,
     delivered_vertices: HashSet<VertexHash>,
     buffer: Vec<Vertex>,
+    blocks_to_propose: Vec<Block>,
     blocks_receiver: Receiver<Block>,
     vertex_receiver: Receiver<Vertex>,
     vertex_output_sender: Sender<Vertex>,
@@ -48,6 +49,7 @@ impl Consensus {
                 state,
                 delivered_vertices: HashSet::new(),
                 buffer: vec![],
+                blocks_to_propose: vec![],
                 blocks_receiver,
             }.run().await;
         });
@@ -55,24 +57,33 @@ impl Consensus {
 
     async fn run(&mut self) {
         loop {
-            if let Some(vertex) = self.vertex_receiver.recv().await {
-                debug!("Vertex received in consensus of node {}: {}", self.node_id, vertex);
-                self.buffer.push(vertex);
+            tokio::select! {
+                Some(vertex) = self.vertex_receiver.recv() => {
+                    debug!("Vertex received in consensus of 'node {}': {}", self.node_id, vertex);
+                    self.buffer.push(vertex);
 
-                // Go through buffer and add vertex in the dag which meets the requirements
-                // and remove from the buffer those added
-                self.buffer.retain(|v| {
-                    if v.round() <= self.state.current_round && self.state.dag.contains_vertices(v.parents()) {
-                        self.state.dag.insert_vertex(v.clone());
-                        false
-                    } else {
-                        true
-                    }
-                })
+                    // Go through buffer and add vertex in the dag which meets the requirements
+                    // and remove from the buffer those added
+                    self.buffer.retain(|v| {
+                        if v.round() <= self.state.current_round && self.state.dag.contains_vertices(v.parents()) {
+                            self.state.dag.insert_vertex(v.clone());
+                            false
+                        } else {
+                            true
+                        }
+                    })
+                },
+                Some(block) = self.blocks_receiver.recv() => {
+                    self.blocks_to_propose.push(block)
+                }
             }
 
-            if self.state.dag.is_quorum_reached_for_round(&(self.state.current_round)) {
+            debug!("Consensus goes to the next iteration");
+
+            if !self.blocks_to_propose.is_empty() && self.state.dag.is_quorum_reached_for_round(&(self.state.current_round)) {
+                info!("DAG has reached the quorum for the round {:?}", self.state.current_round);
                 if Self::is_last_round_in_wave(self.state.current_round) {
+                    info!("Finished the last round {:?} in the wave. Start to order vertices", self.state.current_round);
                     let ordered_vertices = self.get_ordered_vertices(self.state.current_round / MAX_WAVE);
 
                     for vertex in ordered_vertices {
@@ -86,33 +97,37 @@ impl Consensus {
                 }
                 // when quorum for the round reached, then go to the next round
                 self.state.current_round += 1;
+                info!("DAG goes to the next round {:?}", self.state.current_round);
                 let new_vertex = self.create_new_vertex(self.state.current_round).await.unwrap();
+
+                info!("Broadcast the new vertex {}", new_vertex);
                 self.vertex_to_broadcast_sender.send(new_vertex).await.unwrap();
             }
         }
     }
 
     async fn create_new_vertex(&mut self, round: Round) -> Option<Vertex> {
-        if let Some(block) = self.blocks_receiver.recv().await {
-            let parents = self.state.dag.get_vertices(&round);
-            let mut vertex = Vertex::new(
-                self.committee.get_node_key(self.node_id).unwrap(),
-                round,
-                block,
-                parents,
-            );
-            self.set_weak_edges(&mut vertex, round);
+        let block = self.blocks_to_propose.pop().unwrap();
+        info!("Start to create a new vertex with the block and {} transactions", block.transactions.len());
+        let parents = self.state.dag.get_vertices(&round);
+        let mut vertex = Vertex::new(
+            self.committee.get_node_key(self.node_id).unwrap(),
+            round,
+            block,
+            parents,
+        );
+        self.set_weak_edges(&mut vertex, round);
 
-            return Some(vertex)
-        }
-        return None
+        return Some(vertex);
     }
 
     fn set_weak_edges(&self, vertex: &mut Vertex, round: Round) {
         for r in (round - 2..1).rev() {
-            for (_, v) in self.state.dag.graph.get(&r).unwrap() {
-                if !self.state.dag.is_linked(&vertex, v) {
-                    vertex.add_parent(v.hash(), r)
+            if let Some(vertices) = self.state.dag.graph.get(&r) {
+                for (_, v) in vertices {
+                    if !self.state.dag.is_linked(&vertex, v) {
+                        vertex.add_parent(v.hash(), r)
+                    }
                 }
             }
         }

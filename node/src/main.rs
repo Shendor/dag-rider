@@ -22,18 +22,7 @@ async fn main() -> Result<()> {
             SubCommand::with_name("run")
                 .about("Run a node")
                 .args_from_usage("--id=<INT> 'Node id'")
-                .subcommand(
-                    SubCommand::with_name("vertex_coordinator")
-                        .about("Run vertex coordinator")
-                )
-                .subcommand(
-                    SubCommand::with_name("worker")
-                        .about("Run a single worker")
-                        .args_from_usage("--id=<INT> 'The worker id'"),
-                )
-                .setting(AppSettings::SubcommandRequiredElseHelp),
         )
-        .setting(AppSettings::SubcommandRequiredElseHelp)
         .get_matches();
 
     let mut logger = env_logger::Builder::from_env(Env::default().default_filter_or("debug"));
@@ -51,36 +40,31 @@ async fn run(matches: &ArgMatches<'_>) -> Result<()> {
 
     let (vertex_output_sender, vertex_output_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
 
-    match matches.subcommand() {
-        ("vertex_coordinator", _) => {
-            let (vertex_to_broadcast_sender, vertex_to_broadcast_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
-            let (vertex_to_consensus_sender, vertex_to_consensus_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
-            let (block_sender, block_receiver) = channel::<Block>(DEFAULT_CHANNEL_CAPACITY);
+    let (vertex_to_broadcast_sender, vertex_to_broadcast_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
+    let (vertex_to_consensus_sender, vertex_to_consensus_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
+    let (block_sender, block_receiver) = channel::<Block>(DEFAULT_CHANNEL_CAPACITY);
 
-            VertexCoordinator::spawn(
-                node_id,
-                Committee::default(),
-                vertex_to_consensus_sender,
-                vertex_to_broadcast_receiver
-            );
+    VertexCoordinator::spawn(
+        node_id,
+        Committee::default(),
+        vertex_to_consensus_sender,
+        vertex_to_broadcast_receiver
+    );
 
-            TransactionCoordinator::spawn(
-                node_id,
-                Committee::default(),
-                block_sender
-            );
+    TransactionCoordinator::spawn(
+        node_id,
+        Committee::default(),
+        block_sender
+    );
 
-            Consensus::spawn(
-                node_id,
-                Committee::default(),
-                vertex_to_consensus_receiver,
-                vertex_to_broadcast_sender,
-                vertex_output_sender,
-                block_receiver
-            );
-        }
-        _ => unreachable!(),
-    }
+    Consensus::spawn(
+        node_id,
+        Committee::default(),
+        vertex_to_consensus_receiver,
+        vertex_to_broadcast_sender,
+        vertex_output_sender,
+        block_receiver
+    );
 
     wait_and_print_vertexs(vertex_output_receiver).await;
     unreachable!();

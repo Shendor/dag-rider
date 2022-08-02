@@ -3,7 +3,7 @@ use std::error::Error;
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::sink::SinkExt as _;
-use log::{info, warn};
+use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{channel, Sender};
 
@@ -30,12 +30,14 @@ impl TransactionCoordinator {
         let (transaction_to_block_builder_sender, transaction_receiver) = channel(DEFAULT_CHANNEL_CAPACITY);
 
         let tx_address = committee.get_tx_receiver_address(node_id).unwrap();
+        debug!("Start listening for transactions on {:?}", tx_address);
         Receiver::spawn(
             tx_address,
             TxReceiverHandler { transaction_to_block_builder_sender },
         );
 
         let address = committee.get_block_receiver_address(node_id).unwrap();
+        debug!("Start listening for blocks on {:?}", address);
         Receiver::spawn(
             address,
             BlockReceiverHandler { block_sender },
@@ -75,14 +77,18 @@ struct BlockReceiverHandler {
 #[async_trait]
 impl MessageHandler for BlockReceiverHandler {
     async fn dispatch(&self, writer: &mut Writer, serialized: Bytes) -> Result<(), Box<dyn Error>> {
+        // debug!("BlockReceiverHandler received the message and sends back the response");
         let _ = writer.send(Bytes::from("Ack")).await;
 
         match bincode::deserialize(&serialized) {
-            Ok(BlockMessage::Block(block)) => self
-                .block_sender
-                .send(block)
-                .await
-                .expect("Failed to send block"),
+            Ok(BlockMessage::Block(block)) => {
+                info!("BlockReceiverHandler received block to process with {} transactions and sends it to Consensus", block.transactions.len());
+                self
+                    .block_sender
+                    .send(block)
+                    .await
+                    .expect("Failed to send block")
+            },
             Err(e) => warn!("Serialization error: {}", e),
         }
         Ok(())

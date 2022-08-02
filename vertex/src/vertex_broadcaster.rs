@@ -31,9 +31,8 @@ impl VertexBroadcaster {
 
                     let handlers = self.network.broadcast(addresses, Bytes::from(bytes)).await;
                     for h in handlers {
-                        match h.await {
-                            Ok(r) => debug!("Received response from the broadcast: {:?}", r),
-                            Err(_) => error!("Broadcast was not successful")
+                        if let Err(e) = h.await {
+                            error!("Broadcast of vertices was not successful")
                         }
                     }
                 }

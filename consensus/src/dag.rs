@@ -15,7 +15,7 @@ impl Dag {
             .map(|v| (v.owner(), v.clone()))
             .collect::<HashMap<_, _>>();
         Dag {
-            graph: [(0, genesis)].iter().cloned().collect(),
+            graph: [(1, genesis)].iter().cloned().collect(),
             min_quorum,
         }
     }

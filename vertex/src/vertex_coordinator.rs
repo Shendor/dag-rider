@@ -1,4 +1,4 @@
-use log::info;
+use log::{debug, info};
 use tokio::sync::mpsc::{Receiver, Sender};
 
 use model::committee::{Committee, Id};
@@ -18,6 +18,7 @@ impl VertexCoordinator {
         vertex_to_broadcast_receiver: Receiver<Vertex>
     ) {
         // Spawn the network receiver listening to vertices broadcasted from the other nodes.
+        debug!("Start listening for vertices from other nodes");
         let address = committee.get_node_address(node_id).unwrap();
         NetworkReceiver::spawn(
             address,

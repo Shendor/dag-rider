@@ -1,4 +1,5 @@
 use bytes::Bytes;
+use log::{debug, error, info};
 use tokio::sync::mpsc::{Receiver};
 
 use model::block::{Block, Transaction};
@@ -35,15 +36,22 @@ impl BlockBuilder {
 
     async fn run(&mut self) {
         while let Some(transaction) = self.transaction_receiver.recv().await {
+            info!("BlockBuilder received transaction {:?}", transaction);
             self.current_transactions.push(transaction);
 
             if self.current_transactions.len() >= BATCH_SIZE {
+                info!("BlockBuilder has enough transactions to make a block. Broadcast it to others");
                 let message = BlockMessage::Block(Block::new(self.current_transactions.drain(..).collect()));
                 let serialized = bincode::serialize(&message).expect("Failed to serialize the block");
 
                 // Broadcast the block through the network.
                 let bytes = Bytes::from(serialized.clone());
-                self.network.broadcast(self.committee.get_node_addresses(), bytes).await;
+                let handlers = self.network.broadcast(self.committee.get_block_receiver_addresses(), bytes).await;
+                for h in handlers {
+                    if let Err(e) = h.await {
+                        error!("Broadcast of the block was not successful: {:?}", e);
+                    }
+                }
             }
         }
     }
