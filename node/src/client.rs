@@ -15,9 +15,6 @@ async fn main() -> Result<()> {
     let matches = App::new(crate_name!())
         .version(crate_version!())
         .args_from_usage("<ADDR> 'The network address of the node where to send txs'")
-        // .args_from_usage("--size=<INT> 'The size of each transaction in bytes'")
-        // .args_from_usage("--rate=<INT> 'The rate (txs/s) at which to send the transactions'")
-        // .args_from_usage("--nodes=[ADDR]... 'Network addresses that must be reachable before starting the benchmark.'")
         .setting(AppSettings::ArgRequiredElseHelp)
         .get_matches();
 

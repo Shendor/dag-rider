@@ -51,12 +51,12 @@ impl Committee {
         validators.insert(2, Validator::new(
             "5a353c630d3faf8e2d333a0983c1c71d5e9b6aed8f4959578fbeb3d3f3172886393b576de0ac1fe86a4dd416cf032543ac1bd066eb82585f779f6ce21237c0cd",
             1235, 1245, 1255));
-        // validators.insert(3, Validator::new(
-        //     "6f4b736b9a6894858a81696d9c96cbdacf3d49099d212213f5abce33da18716f067f8a2b9aeb602cd4163291ebbf39e0e024634f3be19bde4c490465d9095a6b",
-        //     1236, 1246, 1256));
-        // validators.insert(4, Validator::new(
-        //     "3ae38eec96146c241f6cadf01995af14f027b23b8fecbc77dbc2e3ed5fec6fc3fb4fe5534f7affc9a8f1d99e290fdb91cc26777edd6fae480cad9f735d1b3680",
-        //     1237, 1247, 1257));
+        validators.insert(3, Validator::new(
+            "6f4b736b9a6894858a81696d9c96cbdacf3d49099d212213f5abce33da18716f067f8a2b9aeb602cd4163291ebbf39e0e024634f3be19bde4c490465d9095a6b",
+            1236, 1246, 1256));
+        validators.insert(4, Validator::new(
+            "3ae38eec96146c241f6cadf01995af14f027b23b8fecbc77dbc2e3ed5fec6fc3fb4fe5534f7affc9a8f1d99e290fdb91cc26777edd6fae480cad9f735d1b3680",
+            1237, 1247, 1257));
 
         Self {
             validators
