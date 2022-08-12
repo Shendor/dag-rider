@@ -15,6 +15,7 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::oneshot;
 use tokio::time::{sleep, Duration};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
+use crate::quorum_response_waiter::wait;
 
 /// Convenient alias for cancel handlers returned to the caller task.
 pub type CancelHandler = oneshot::Receiver<Bytes>;
@@ -79,6 +80,16 @@ impl ReliableSender {
             handlers.push(handler);
         }
         handlers
+    }
+
+    pub async fn broadcast_and_wait(
+        &mut self,
+        addresses: Vec<SocketAddr>,
+        data: Bytes,
+        min_responses: usize
+    ) -> bool {
+        let handlers = self.broadcast(addresses, data).await;
+        wait(min_responses, handlers).await
     }
 
     /// Pick a few addresses at random (specified by `nodes`) and send the message only to them.

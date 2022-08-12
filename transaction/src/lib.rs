@@ -1,5 +1,6 @@
 mod block_builder;
-mod transaction_coordinator;
+mod transaction_service;
+pub mod handler;
 
 
-pub use crate::transaction_coordinator::TransactionCoordinator;
+pub use crate::transaction_service::TransactionService;

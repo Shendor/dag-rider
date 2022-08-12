@@ -32,7 +32,7 @@ impl VertexBroadcaster {
                     let handlers = self.network.broadcast(addresses, Bytes::from(bytes)).await;
                     for h in handlers {
                         if let Err(e) = h.await {
-                            error!("Broadcast of vertices was not successful")
+                            error!("Broadcast of vertices was not successful: {:?}", e)
                         }
                     }
                 }

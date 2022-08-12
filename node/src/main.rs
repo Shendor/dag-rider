@@ -1,5 +1,5 @@
-use anyhow::{Result};
-use clap::{App, AppSettings, ArgMatches, SubCommand};
+use anyhow::{Context, Result};
+use clap::{App, ArgMatches, SubCommand};
 use env_logger::Env;
 use log::info;
 use tokio::sync::mpsc::{channel, Receiver};
@@ -8,7 +8,8 @@ use consensus::Consensus;
 use model::block::Block;
 use model::committee::{Committee, Id};
 use model::vertex::Vertex;
-use transaction::TransactionCoordinator;
+use storage::Storage;
+use transaction::TransactionService;
 use vertex::vertex_coordinator::VertexCoordinator;
 
 pub const DEFAULT_CHANNEL_CAPACITY: usize = 1000;
@@ -44,6 +45,8 @@ async fn run(matches: &ArgMatches<'_>) -> Result<()> {
     let (vertex_to_consensus_sender, vertex_to_consensus_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
     let (block_sender, block_receiver) = channel::<Block>(DEFAULT_CHANNEL_CAPACITY);
 
+    let storage = Storage::new(matches.value_of("store").unwrap()).context("Failed to create the storage")?;
+
     VertexCoordinator::spawn(
         node_id,
         Committee::default(),
@@ -51,9 +54,10 @@ async fn run(matches: &ArgMatches<'_>) -> Result<()> {
         vertex_to_broadcast_receiver
     );
 
-    TransactionCoordinator::spawn(
+    TransactionService::spawn(
         node_id,
         Committee::default(),
+        storage,
         block_sender
     );
 

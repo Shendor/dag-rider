@@ -21,6 +21,7 @@ model = { path = "../model" }
 consensus = { path = "../consensus" }
 vertex = { path = "../vertex" }
 transaction = { path = "../transaction" }
+storage = { path = "../storage" }
 
 [[bin]]
 name = "client"

@@ -1,6 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
-use std::fmt::{Display, format, Formatter};
-use std::ops::Add;
+use std::fmt::{Display, Formatter};
 use model::committee::NodePublicKey;
 use model::Round;
 use model::vertex::{Vertex, VertexHash};

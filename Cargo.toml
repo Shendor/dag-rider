@@ -1,2 +1,2 @@
 [workspace]
-members = ["model", "consensus", "network", "node", "vertex", "transaction"]
+members = ["model", "consensus", "network", "node", "vertex", "transaction", "storage"]
