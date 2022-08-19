@@ -1,4 +1,4 @@
-use std::collections::{HashMap};
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use ed25519_dalek::Keypair;
 use serde::{Deserialize};
@@ -39,12 +39,12 @@ impl Validator {
 
 #[derive(Clone, Deserialize)]
 pub struct Committee {
-    pub validators: HashMap<Id, Validator>,
+    pub validators: BTreeMap<Id, Validator>,
 }
 
 impl Committee {
     pub fn default() -> Self {
-        let mut validators = HashMap::new();
+        let mut validators = BTreeMap::new();
         validators.insert(1, Validator::new(
             "ad7f2ee3958a7f3fa2c84931770f5773ef7694fdd0bb217d90f29a94199c9d7307ca3851515c89344639fe6a4077923068d1d7fc6106701213c61d34ef8e9416",
             1234, 1244, 1254));
@@ -71,11 +71,22 @@ impl Committee {
         self.size() - 1
     }
 
+    /// Returns the stake required to reach availability (f+1).
+    pub fn validity_threshold(&self) -> usize {
+        // If N = 3f + 1 + k (0 <= k < 3)
+        // then (N + 2) / 3 = f + 1 + k/3 = f + 1
+        ((self.validators.len() + 2) / 3) as usize
+    }
+
     pub fn get_node_address(&self, id: Id) -> Option<SocketAddr> {
         match self.validators.get(&id) {
             Some(v) => Some(v.address),
             None => None
         }
+    }
+
+    pub fn get_node_address_by_key(&self, node_key: &NodePublicKey) -> Option<SocketAddr> {
+        self.validators.iter().find(|(_, v)| v.public_key == *node_key).map(|(_, v)| v.address)
     }
 
     pub fn get_node_addresses(&self) -> Vec<SocketAddr> {
@@ -94,12 +105,16 @@ impl Committee {
         self.validators.get(&id).map(|v| v.block_address)
     }
 
+    pub fn get_block_receiver_address_by_key(&self, node_key: NodePublicKey) -> Option<SocketAddr> {
+        self.validators.iter().find(|(_, v)| v.public_key == node_key).map(|(_, v)| v.block_address)
+    }
+
     pub fn get_block_receiver_addresses(&self) -> Vec<SocketAddr> {
         self.validators.iter().map(|v| v.1.block_address).collect()
     }
 
-    pub fn get_node_addresses_but_me(&self, id: Id) -> Vec<SocketAddr> {
-        self.validators.iter().filter(|v| *v.0 != id).map(|v| v.1.address).collect()
+    pub fn get_node_addresses_but_me(&self, node_key: &NodePublicKey) -> Vec<SocketAddr> {
+        self.validators.iter().filter(|(_, v)| v.public_key != *node_key).map(|v| v.1.address).collect()
     }
 
     pub fn get_nodes_keys(&self) -> Vec<NodePublicKey> {
@@ -108,5 +123,11 @@ impl Committee {
 
     pub fn get_node_key(&self, id: Id) -> Option<NodePublicKey> {
         self.validators.get(&id).map(|v| v.public_key)
+    }
+
+    pub fn leader(&self, seed: usize) -> NodePublicKey {
+        let mut keys: Vec<_> = self.validators.iter().map(|(_, v)| v.public_key).collect();
+        keys.sort();
+        keys[seed % self.size()].clone()
     }
 }

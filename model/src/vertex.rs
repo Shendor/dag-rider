@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap};
 use std::fmt;
 use serde::{Deserialize, Serialize};
-use crate::block::Block;
+use crate::block::BlockHash;
 use crate::committee::NodePublicKey;
 use crate::Round;
 
@@ -13,7 +13,7 @@ pub struct Vertex {
     hash: VertexHash,
     /// source of the header (the node which created it)
     owner: NodePublicKey,
-    block: Block,
+    blocks: Vec<BlockHash>,
     parents: BTreeMap<VertexHash, Round>,
     round: Round,
 }
@@ -21,13 +21,13 @@ pub struct Vertex {
 impl Vertex {
     pub fn new(owner: NodePublicKey,
                round: Round,
-               block: Block,
+               blocks: Vec<BlockHash>,
                parents: BTreeMap<VertexHash, Round>,
     ) -> Self {
         let vertex = Self {
             owner,
             round,
-            block,
+            blocks,
             parents,
             hash: VertexHash::default(),
         };
@@ -40,7 +40,7 @@ impl Vertex {
     }
 
     pub fn genesis(nodes: Vec<NodePublicKey>) -> Vec<Self> {
-        nodes.iter().map(|owner| Vertex::new(*owner, 1, Block::default(), BTreeMap::new())).collect()
+        nodes.iter().map(|owner| Vertex::new(*owner, 1, vec![], BTreeMap::new())).collect()
     }
 
     pub fn add_parent(&mut self, parent_vertex_hash: VertexHash, round: Round) {
@@ -78,8 +78,16 @@ impl Vertex {
         self.owner
     }
 
+    pub fn encoded_owner(&self) -> String {
+        base64::encode(self.owner())
+    }
+
     pub fn hash(&self) -> VertexHash {
         self.hash
+    }
+
+    pub fn encoded_hash(&self) -> String {
+        base64::encode(self.hash())
     }
 
     fn is_previous_round(&self, previous_round: &Round) -> bool {

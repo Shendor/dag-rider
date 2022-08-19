@@ -3,7 +3,7 @@ use log::{debug, info};
 use tokio::sync::mpsc::{Receiver, Sender};
 
 use model::{Round, Wave};
-use model::block::Block;
+use model::block::{Block, BlockHash};
 use model::committee::{Committee, Id};
 use model::vertex::{Vertex, VertexHash};
 
@@ -21,7 +21,7 @@ pub struct Consensus {
     state: State,
     delivered_vertices: HashSet<VertexHash>,
     buffer: Vec<Vertex>,
-    blocks_to_propose: Vec<Block>,
+    blocks_to_propose: Vec<BlockHash>,
     blocks_receiver: Receiver<Block>,
     vertex_receiver: Receiver<Vertex>,
     vertex_output_sender: Sender<Vertex>,
@@ -75,7 +75,7 @@ impl Consensus {
                     })
                 },
                 Some(block) = self.blocks_receiver.recv() => {
-                    self.blocks_to_propose.push(block)
+                    self.blocks_to_propose.push(block.hash())
                 }
             }
 
@@ -107,13 +107,12 @@ impl Consensus {
     }
 
     async fn create_new_vertex(&mut self, round: Round) -> Option<Vertex> {
-        let block = self.blocks_to_propose.pop().unwrap();
-        info!("Start to create a new vertex with the block and {} transactions", block.transactions.len());
+        info!("Start to create a new vertex");
         let parents = self.state.dag.get_vertices(&(round - 1));
         let mut vertex = Vertex::new(
             self.committee.get_node_key(self.node_id).unwrap(),
             round,
-            block,
+            self.blocks_to_propose.drain(..).collect(),
             parents,
         );
 

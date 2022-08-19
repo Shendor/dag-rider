@@ -6,7 +6,7 @@ use model::vertex::{Vertex};
 use network::{Receiver as NetworkReceiver, ReliableSender};
 
 use crate::vertex_broadcaster::VertexBroadcaster;
-use crate::vertex_message_handler::VertexReceiverHandler;
+use crate::vertex_message_handler::{VertexMessage, VertexReceiverHandler};
 
 pub struct VertexCoordinator;
 
@@ -14,7 +14,7 @@ impl VertexCoordinator {
     pub fn spawn(
         node_id: Id,
         committee: Committee,
-        vertex_to_consensus_sender: Sender<Vertex>,
+        vertex_message_sender: Sender<VertexMessage>,
         vertex_to_broadcast_receiver: Receiver<Vertex>
     ) {
         // Spawn the network receiver listening to vertices broadcasted from the other nodes.
@@ -22,7 +22,7 @@ impl VertexCoordinator {
         let address = committee.get_node_address(node_id).unwrap();
         NetworkReceiver::spawn(
             address,
-            VertexReceiverHandler { vertex_to_consensus_sender },
+            VertexReceiverHandler { vertex_message_sender },
         );
         info!("Vertex Coordinator listening to the messages on {}", address);
 

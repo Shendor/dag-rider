@@ -11,6 +11,7 @@ use model::vertex::Vertex;
 use storage::Storage;
 use transaction::TransactionService;
 use vertex::vertex_coordinator::VertexCoordinator;
+use vertex::vertex_message_handler::VertexMessage;
 
 pub const DEFAULT_CHANNEL_CAPACITY: usize = 1000;
 
@@ -42,7 +43,8 @@ async fn run(matches: &ArgMatches<'_>) -> Result<()> {
     let (vertex_output_sender, vertex_output_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
 
     let (vertex_to_broadcast_sender, vertex_to_broadcast_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
-    let (vertex_to_consensus_sender, vertex_to_consensus_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
+    let (_vertex_to_consensus_sender, vertex_to_consensus_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
+    let (vertex_message_sender, _vertex_message_receiver) = channel::<VertexMessage>(DEFAULT_CHANNEL_CAPACITY);
     let (block_sender, block_receiver) = channel::<Block>(DEFAULT_CHANNEL_CAPACITY);
 
     let storage = Storage::new(matches.value_of("store").unwrap()).context("Failed to create the storage")?;
@@ -50,7 +52,7 @@ async fn run(matches: &ArgMatches<'_>) -> Result<()> {
     VertexCoordinator::spawn(
         node_id,
         Committee::default(),
-        vertex_to_consensus_sender,
+        vertex_message_sender,
         vertex_to_broadcast_receiver
     );
 
