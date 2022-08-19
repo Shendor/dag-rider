@@ -77,7 +77,7 @@ impl VertexAggregator {
                     }
                 },
 
-                // We receive here loopback certificates from the `CertificateWaiter`. Those are certificates for which
+                // We receive here loopback vertices from the `VertexSynchronizer`. Those are vertices for which
                 // we interrupted execution (we were missing some of their ancestors) and we are now ready to resume
                 // processing.
                 Some(vertex) = self.vertex_sync_receiver.recv() => self.process_vertex(&vertex).await,
@@ -122,7 +122,7 @@ impl VertexAggregator {
             self.proposer_sender
                 .send((parents, round))
                 .await
-                .expect("Failed to send certificate");
+                .expect("Failed to send parents for the vertex round");
         }
 
         // Send it to the consensus layer.
@@ -147,9 +147,9 @@ impl VertexAggregator {
         }
     }
 
-    /// Returns the parents of a header if we have them all. If at least one parent is missing,
+    /// Returns the parents of a vertex if we have them all. If at least one parent is missing,
     /// we return an empty vector, synchronize with other nodes, and re-schedule processing
-    /// of the header for when we will have all the parents.
+    /// of the vertex for when we will have all the parents.
     async fn get_parents(&mut self, vertex: &Vertex) -> VertexResult<Vec<Vertex>> {
         let mut missing_vertices = Vec::new();
         let mut parents = Vec::new();

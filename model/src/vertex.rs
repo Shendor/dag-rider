@@ -11,7 +11,7 @@ pub type VertexHash = [u8; 32];
 pub struct Vertex {
     /// Vertex unique identifier
     hash: VertexHash,
-    /// source of the header (the node which created it)
+    /// source of the vertex (the node which created it)
     owner: NodePublicKey,
     blocks: Vec<BlockHash>,
     parents: BTreeMap<VertexHash, Round>,

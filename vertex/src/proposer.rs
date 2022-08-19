@@ -10,7 +10,7 @@ use model::vertex::Vertex;
 use network::ReliableSender;
 use crate::vertex_message_handler::VertexMessage;
 
-/// The proposer creates new headers and send them to the core for broadcasting and further processing.
+/// The proposer creates new vertices and send them to the VertexAggregator for further processing.
 pub struct Proposer {
     node_key: NodePublicKey,
     /// The committee information.
@@ -28,9 +28,9 @@ pub struct Proposer {
     network: ReliableSender,
     /// The current round of the dag.
     round: Round,
-    /// Holds the certificates' ids waiting to be included in the next header.
+    /// Holds the vertices waiting to be included in the next vertex.
     last_parents: Vec<Vertex>,
-    /// Holds the certificate of the last leader (if any).
+    /// Holds the vertex of the last leader (if any).
     last_leader: Option<Vertex>,
     /// Holds the blocks' hashes waiting to be included in the next vertex.
     blocks: Vec<BlockHash>,
@@ -40,8 +40,7 @@ impl Proposer {
     pub fn spawn(
         node_key: NodePublicKey,
         committee: Committee,
-        header_size: usize,
-        max_header_delay: u64,
+        max_vertex_delay: u64,
         vertices_receiver: Receiver<(Vec<Vertex>, Round)>,
         vertex_sender: Sender<Vertex>,
         block_receiver: Receiver<BlockHash>,
@@ -53,7 +52,7 @@ impl Proposer {
             Self {
                 node_key,
                 committee,
-                max_vertex_delay: max_header_delay,
+                max_vertex_delay,
                 vertices_receiver,
                 vertex_sender,
                 block_receiver,
@@ -61,7 +60,7 @@ impl Proposer {
                 round: 0,
                 last_parents: genesis,
                 last_leader: None,
-                blocks: Vec::with_capacity(2 * header_size),
+                blocks: Vec::with_capacity(1000),
             }
             .run()
             .await;
