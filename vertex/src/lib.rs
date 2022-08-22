@@ -1,5 +1,5 @@
 #[macro_use]
-pub mod vertex_coordinator;
+pub mod vertex_service;
 pub mod vertex_broadcaster;
 pub mod vertex_message_handler;
 mod proposer;

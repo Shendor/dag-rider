@@ -11,6 +11,7 @@ use crate::state::State;
 
 mod dag;
 mod state;
+mod garbage_collector;
 
 const MAX_WAVE: Wave = 4;
 
@@ -128,7 +129,7 @@ impl Consensus {
             if let Some(vertices) = self.state.dag.graph.get(&r) {
                 for (_, v) in vertices {
                     if !self.state.dag.is_linked(&vertex, v) {
-                        vertex.add_parent(v.hash(), r)
+                        vertex.add_parent(v.hash(), r, v.created_time())
                     }
                 }
             }

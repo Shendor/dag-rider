@@ -6,8 +6,6 @@ use futures::stream::StreamExt as _;
 use log::{debug, error};
 use network::SimpleSender;
 use std::collections::HashMap;
-use std::sync::atomic::AtomicU64;
-use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::time::{sleep, Duration, Instant};
@@ -36,15 +34,13 @@ pub struct VertexSynchronizer {
     committee: Committee,
     /// The persistent storage.
     storage: Storage,
-    /// The current consensus round (used for cleanup).
-    consensus_round: Arc<AtomicU64>,
     /// The delay to wait before re-trying sync requests.
     sync_retry_delay: u64,
     /// Determine with how many nodes to sync when re-trying to send sync-request.
     sync_retry_nodes: usize,
 
     /// Receives sync commands from the `Synchronizer`.
-    rx_synchronizer: Receiver<SyncMessage>,
+    sync_message_receiver: Receiver<SyncMessage>,
     /// The Vertex Aggregator which can accept and process the un-sync (missing) vertices.
     vertex_aggregator_sender: Sender<Vertex>,
 
@@ -54,6 +50,7 @@ pub struct VertexSynchronizer {
     parent_requests: HashMap<VertexHash, (Round, u128)>,
     /// Store pending requests for the vertex.
     pending: HashMap<VertexHash, (Round, Sender<()>)>,
+    gc_message_receiver: Receiver<Round>
 }
 
 impl VertexSynchronizer {
@@ -61,10 +58,10 @@ impl VertexSynchronizer {
         node_key: NodePublicKey,
         committee: Committee,
         storage: Storage,
-        consensus_round: Arc<AtomicU64>,
         sync_retry_delay: u64,
         sync_retry_nodes: usize,
-        rx_synchronizer: Receiver<SyncMessage>,
+        sync_message_receiver: Receiver<SyncMessage>,
+        gc_message_receiver: Receiver<Round>,
         vertex_aggregator_sender: Sender<Vertex>,
     ) {
         tokio::spawn(async move {
@@ -72,17 +69,15 @@ impl VertexSynchronizer {
                 node_key,
                 committee,
                 storage,
-                consensus_round,
                 sync_retry_delay,
                 sync_retry_nodes,
-                rx_synchronizer,
+                sync_message_receiver,
                 vertex_aggregator_sender,
+                gc_message_receiver,
                 network: SimpleSender::new(),
                 parent_requests: HashMap::new(),
                 pending: HashMap::new(),
-            }
-                .run()
-                .await;
+            }.run().await;
         });
     }
 
@@ -95,7 +90,7 @@ impl VertexSynchronizer {
 
         loop {
             tokio::select! {
-                Some(message) = self.rx_synchronizer.recv() => {
+                Some(message) = self.sync_message_receiver.recv() => {
                     match message {
                         SyncMessage::SyncBlocks(_,_) => {
                             //TODO: implement sync of blocks
@@ -192,10 +187,19 @@ impl VertexSynchronizer {
 
                     // Reschedule the timer.
                     timer.as_mut().reset(Instant::now() + Duration::from_millis(TIMER_RESOLUTION));
-                }
-            }
+                },
 
-            //TODO: cleanup state for GC rounds
+                Some(gc_round) = self.gc_message_receiver.recv() => {
+                     let mut round = gc_round;
+                     for (r, handler) in self.pending.values() {
+                        if r <= &mut round {
+                            let _ = handler.send(()).await;
+                        }
+                    }
+                    self.pending.retain(|_, (r, _)| r > &mut round);
+                    self.parent_requests.retain(|_, (r, _)| r > &mut round);
+                },
+            }
         }
     }
 

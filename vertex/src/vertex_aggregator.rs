@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use tokio::sync::mpsc::{Receiver, Sender};
 use model::committee::{Committee, NodePublicKey};
 use model::Round;
-use model::vertex::Vertex;
+use model::vertex::{Vertex, VertexHash};
 use storage::Storage;
 use crate::vertex_message_handler::VertexMessage;
 use crate::vertex_synchronizer::SyncMessage;
@@ -151,12 +151,12 @@ impl VertexAggregator {
     /// we return an empty vector, synchronize with other nodes, and re-schedule processing
     /// of the vertex for when we will have all the parents.
     async fn get_parents(&mut self, vertex: &Vertex) -> VertexResult<Vec<Vertex>> {
-        let mut missing_vertices = Vec::new();
+        let mut missing_vertices: Vec<VertexHash> = Vec::new();
         let mut parents = Vec::new();
-        for (vertex_hash, _) in vertex.parents() {
-            match self.storage.read(vertex_hash.to_vec()).await? {
+        for (parent, _) in vertex.parents() {
+            match self.storage.read(parent.to_vec()).await? {
                 Some(raw_vertex) => parents.push(raw_vertex),
-                None => missing_vertices.push(vertex_hash.clone()),
+                None => missing_vertices.push(parent.clone()),
             }
         }
 

@@ -8,9 +8,9 @@ use network::{Receiver as NetworkReceiver, ReliableSender};
 use crate::vertex_broadcaster::VertexBroadcaster;
 use crate::vertex_message_handler::{VertexMessage, VertexReceiverHandler};
 
-pub struct VertexCoordinator;
+pub struct VertexService;
 
-impl VertexCoordinator {
+impl VertexService {
     pub fn spawn(
         node_id: Id,
         committee: Committee,

@@ -28,8 +28,8 @@ impl Dag {
             .insert(vertex.owner(), vertex);
     }
 
-    pub fn contains_vertices(&self, vertices: &BTreeMap<VertexHash, Round>) -> bool {
-        vertices.iter().all(|(vertex_hash, round)| {
+    pub fn contains_vertices(&self, vertices: &BTreeMap<VertexHash, (Round, u128)>) -> bool {
+        vertices.iter().all(|(vertex_hash, (round, _))| {
             match self.graph.get(round) {
                 Some(v) => v.values().any(|vertex| vertex.hash() == *vertex_hash),
                 None => false
@@ -37,9 +37,9 @@ impl Dag {
         })
     }
 
-    pub fn get_vertices(&self, round: &Round) -> BTreeMap<VertexHash, Round> {
+    pub fn get_vertices(&self, round: &Round) -> BTreeMap<VertexHash, (Round, u128)> {
         match self.graph.get(round) {
-            Some(v) => v.iter().map(|(_, v)| { (v.hash(), v.round()) }).collect(),
+            Some(v) => v.iter().map(|(_, v)| (v.hash(), (v.round(), v.created_time())) ).collect(),
             None => BTreeMap::default()
         }
     }
@@ -62,19 +62,19 @@ impl Dag {
     }
 
     pub fn is_strongly_linked(&self, newest: &Vertex, oldest: &Vertex) -> bool {
-        self.is_linked_internal(newest, oldest, |v: &Vertex| -> BTreeMap<VertexHash, Round> { v.get_strong_parents() })
+        self.is_linked_internal(newest, oldest, |v: &Vertex| -> BTreeMap<VertexHash, (Round, u128)> { v.get_strong_parents() })
     }
 
     pub fn is_linked(&self, newest: &Vertex, oldest: &Vertex) -> bool {
-        self.is_linked_internal(newest, oldest, |v: &Vertex| -> BTreeMap<VertexHash, Round> { v.get_all_parents() })
+        self.is_linked_internal(newest, oldest, |v: &Vertex| -> BTreeMap<VertexHash, (Round, u128)> { v.get_all_parents() })
     }
 
-    fn is_linked_internal(&self, newest: &Vertex, oldest: &Vertex, get_parents: fn(&Vertex) -> BTreeMap<VertexHash, Round>) -> bool {
+    fn is_linked_internal(&self, newest: &Vertex, oldest: &Vertex, get_parents: fn(&Vertex) -> BTreeMap<VertexHash, (Round, u128)>) -> bool {
         if newest.round() > oldest.round() {
             let mut vertex_stack = vec![newest];
             while !vertex_stack.is_empty() {
                 let vertex = vertex_stack.pop().unwrap();
-                for (parent, round) in get_parents(vertex) {
+                for (parent, (round, _)) in get_parents(vertex) {
                     if parent == oldest.hash() {
                         return true;
                     } else if round > oldest.round() {
@@ -107,8 +107,8 @@ impl Display for Dag {
                 vertex_ids.insert(vertex.hash(), c);
 
                 let mut parents_line = String::new();
-                for (hash, round) in vertex.parents() {
-                    if let Some(id) = vertex_ids.get(hash) {
+                for (parent, (round, _)) in vertex.parents() {
+                    if let Some(id) = vertex_ids.get(parent) {
                         parents_line.push_str(format!(" {}-{}", round, id).as_str());
                     }
                 }

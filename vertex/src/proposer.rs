@@ -145,7 +145,7 @@ impl Proposer {
             self.node_key,
             self.round,
             self.blocks.drain(..).collect(),
-            self.last_parents.drain(..).map(|x| (x.hash(), x.round())).collect(),
+            self.last_parents.drain(..).map(|v| (v.hash(), (v.round(),v.created_time()))).collect(),
         );
 
         let addresses = self.committee.get_node_addresses();

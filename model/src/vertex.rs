@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap};
 use std::fmt;
+use std::time::SystemTime;
 use serde::{Deserialize, Serialize};
 use crate::block::BlockHash;
 use crate::committee::NodePublicKey;
@@ -14,21 +15,27 @@ pub struct Vertex {
     /// source of the vertex (the node which created it)
     owner: NodePublicKey,
     blocks: Vec<BlockHash>,
-    parents: BTreeMap<VertexHash, Round>,
+    parents: BTreeMap<VertexHash, (Round, u128)>,
     round: Round,
+    timestamp: u128,
 }
 
 impl Vertex {
     pub fn new(owner: NodePublicKey,
                round: Round,
                blocks: Vec<BlockHash>,
-               parents: BTreeMap<VertexHash, Round>,
+               parents: BTreeMap<VertexHash, (Round, u128)>,
     ) -> Self {
+        let now = SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("Failed to measure time")
+            .as_millis();
         let vertex = Self {
             owner,
             round,
             blocks,
             parents,
+            timestamp: now,
             hash: VertexHash::default(),
         };
         let encoded = bincode::serialize(&vertex).unwrap();
@@ -43,25 +50,25 @@ impl Vertex {
         nodes.iter().map(|owner| Vertex::new(*owner, 1, vec![], BTreeMap::new())).collect()
     }
 
-    pub fn add_parent(&mut self, parent_vertex_hash: VertexHash, round: Round) {
-        self.parents.insert(parent_vertex_hash, round);
+    pub fn add_parent(&mut self, parent_vertex_hash: VertexHash, round: Round, parent_vertex_time: u128) {
+        self.parents.insert(parent_vertex_hash, (round, parent_vertex_time));
     }
 
-    pub fn get_strong_parents(&self) -> BTreeMap<VertexHash, Round> {
+    pub fn get_strong_parents(&self) -> BTreeMap<VertexHash, (Round, u128)> {
         self.parents.iter()
-            .filter(|(_, r)| self.is_previous_round(r))
-            .map(|(h, r)| (h.clone(), r.clone()))
-            .collect::<BTreeMap<VertexHash, Round>>()
+            .filter(|(_, (r, _))| self.is_previous_round(r))
+            .map(|(h, (r, t))| (h.clone(), (r.clone(), t.clone())))
+            .collect::<BTreeMap<VertexHash, (Round, u128)>>()
     }
 
-    pub fn get_all_parents(&self) -> BTreeMap<VertexHash, Round> {
+    pub fn get_all_parents(&self) -> BTreeMap<VertexHash, (Round, u128)> {
         self.parents.clone()
     }
 
     pub fn is_weak_parent(&self, vertex_hash: &VertexHash) -> bool {
         match self.parents.get(vertex_hash) {
             // difference between round of parent vertex and current round should not be 1
-            Some(r) => !self.is_previous_round(r),
+            Some((r, _)) => !self.is_previous_round(r),
             None => false
         }
     }
@@ -70,7 +77,7 @@ impl Vertex {
         self.round
     }
 
-    pub fn parents(&self) -> &BTreeMap<VertexHash, Round> {
+    pub fn parents(&self) -> &BTreeMap<VertexHash, (Round, u128)> {
         &self.parents
     }
 
@@ -88,6 +95,10 @@ impl Vertex {
 
     pub fn encoded_hash(&self) -> String {
         base64::encode(self.hash())
+    }
+
+    pub fn created_time(&self) -> u128 {
+        self.timestamp
     }
 
     fn is_previous_round(&self, previous_round: &Round) -> bool {

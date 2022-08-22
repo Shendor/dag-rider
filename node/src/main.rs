@@ -10,7 +10,7 @@ use model::committee::{Committee, Id};
 use model::vertex::Vertex;
 use storage::Storage;
 use transaction::TransactionService;
-use vertex::vertex_coordinator::VertexCoordinator;
+use vertex::vertex_service::VertexService;
 use vertex::vertex_message_handler::VertexMessage;
 
 pub const DEFAULT_CHANNEL_CAPACITY: usize = 1000;
@@ -49,7 +49,7 @@ async fn run(matches: &ArgMatches<'_>) -> Result<()> {
 
     let storage = Storage::new(matches.value_of("store").unwrap()).context("Failed to create the storage")?;
 
-    VertexCoordinator::spawn(
+    VertexService::spawn(
         node_id,
         Committee::default(),
         vertex_message_sender,
