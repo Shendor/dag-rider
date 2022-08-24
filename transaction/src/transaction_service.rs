@@ -1,7 +1,7 @@
 use log::{debug};
 use tokio::sync::mpsc::{channel, Sender};
 
-use model::block::{Block};
+use model::block::{Block, BlockHash};
 use model::committee::{Committee, Id};
 use model::DEFAULT_CHANNEL_CAPACITY;
 use network::Receiver;
@@ -16,7 +16,7 @@ impl TransactionService {
         node_id: Id,
         committee: Committee,
         storage: Storage,
-        block_sender: Sender<Block>,
+        block_sender: Sender<BlockHash>,
     ) {
         let (transaction_sender, transaction_receiver) = channel(DEFAULT_CHANNEL_CAPACITY);
 

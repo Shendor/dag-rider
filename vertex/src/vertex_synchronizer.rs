@@ -11,7 +11,7 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::time::{sleep, Duration, Instant};
 use model::block::BlockHash;
 use model::committee::{Committee, NodePublicKey};
-use model::Round;
+use model::{Round, Timestamp};
 use model::vertex::{Vertex, VertexHash};
 use storage::Storage;
 use crate::vertex_message_handler::VertexMessage;
@@ -19,6 +19,10 @@ use crate::vertex_message_handler::VertexMessage;
 /// The resolution of the timer that checks whether we received replies to our sync requests, and triggers
 /// new sync requests if we didn't.
 const TIMER_RESOLUTION: u64 = 1_000;
+/// The delay to wait before re-trying sync requests.
+const SYNC_RETRY_DELAY: u128 = 1_000;
+/// Determine with how many nodes to sync when re-trying to send sync-request.
+const SYNC_RETRY_NODES: usize = 3;
 
 #[derive(Debug)]
 pub enum SyncMessage {
@@ -34,23 +38,19 @@ pub struct VertexSynchronizer {
     committee: Committee,
     /// The persistent storage.
     storage: Storage,
-    /// The delay to wait before re-trying sync requests.
-    sync_retry_delay: u64,
-    /// Determine with how many nodes to sync when re-trying to send sync-request.
-    sync_retry_nodes: usize,
 
     /// Receives sync commands from the `Synchronizer`.
     sync_message_receiver: Receiver<SyncMessage>,
     /// The Vertex Aggregator which can accept and process the un-sync (missing) vertices.
-    vertex_aggregator_sender: Sender<Vertex>,
+    vertex_sync_sender: Sender<Vertex>,
 
     /// Network driver allowing to send messages.
     network: SimpleSender,
     /// Store vertices for which we made sync requests in order to retry them if timeout.
-    parent_requests: HashMap<VertexHash, (Round, u128)>,
+    parent_requests: HashMap<VertexHash, (Round, Timestamp)>,
     /// Store pending requests for the vertex.
     pending: HashMap<VertexHash, (Round, Sender<()>)>,
-    gc_message_receiver: Receiver<Round>
+    gc_message_receiver: tokio::sync::broadcast::Receiver<Round>
 }
 
 impl VertexSynchronizer {
@@ -58,21 +58,17 @@ impl VertexSynchronizer {
         node_key: NodePublicKey,
         committee: Committee,
         storage: Storage,
-        sync_retry_delay: u64,
-        sync_retry_nodes: usize,
         sync_message_receiver: Receiver<SyncMessage>,
-        gc_message_receiver: Receiver<Round>,
-        vertex_aggregator_sender: Sender<Vertex>,
+        gc_message_receiver: tokio::sync::broadcast::Receiver<Round>,
+        vertex_sync_sender: Sender<Vertex>,
     ) {
         tokio::spawn(async move {
             Self {
                 node_key,
                 committee,
                 storage,
-                sync_retry_delay,
-                sync_retry_nodes,
                 sync_message_receiver,
-                vertex_aggregator_sender,
+                vertex_sync_sender,
                 gc_message_receiver,
                 network: SimpleSender::new(),
                 parent_requests: HashMap::new(),
@@ -152,7 +148,7 @@ impl VertexSynchronizer {
                             let _ = self.parent_requests.remove(hash);
                         }
                         // Send missing vertex to the Vertex Aggregator
-                        self.vertex_aggregator_sender.send(vertex).await.expect("Failed to send vertex");
+                        self.vertex_sync_sender.send(vertex).await.expect("Failed to send vertex");
                     },
                     Ok(None) => {
                         // This request has been canceled.
@@ -174,7 +170,7 @@ impl VertexSynchronizer {
 
                     let mut vertices_to_retry = Vec::new();
                     for (vertex_hash, (_, timestamp)) in &self.parent_requests {
-                        if timestamp + (self.sync_retry_delay as u128) < now {
+                        if timestamp + SYNC_RETRY_DELAY < now {
                             debug!("Requesting sync for vertex {:?} (retry)",  base64::encode(vertex_hash));
                             vertices_to_retry.push(vertex_hash.clone());
                         }
@@ -183,13 +179,13 @@ impl VertexSynchronizer {
                     let addresses = self.committee.get_node_addresses_but_me(&self.node_key);
                     let message = VertexMessage::VertexRequest(vertices_to_retry, self.node_key);
                     let bytes = bincode::serialize(&message).expect("Failed to serialize VertexRequest");
-                    self.network.lucky_broadcast(addresses, Bytes::from(bytes), self.sync_retry_nodes).await;
+                    self.network.lucky_broadcast(addresses, Bytes::from(bytes), SYNC_RETRY_NODES).await;
 
                     // Reschedule the timer.
                     timer.as_mut().reset(Instant::now() + Duration::from_millis(TIMER_RESOLUTION));
                 },
 
-                Some(gc_round) = self.gc_message_receiver.recv() => {
+                Ok(gc_round) = self.gc_message_receiver.recv() => {
                      let mut round = gc_round;
                      for (r, handler) in self.pending.values() {
                         if r <= &mut round {

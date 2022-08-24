@@ -3,9 +3,12 @@ use clap::{App, ArgMatches, SubCommand};
 use env_logger::Env;
 use log::info;
 use tokio::sync::mpsc::{channel, Receiver};
+use consensus::consensus::Consensus;
+use consensus::garbage_collector::GarbageCollector;
 
-use model::block::Block;
+use model::block::{Block, BlockHash};
 use model::committee::{Committee, Id};
+use model::{Round, Timestamp};
 use model::vertex::Vertex;
 use storage::Storage;
 use transaction::TransactionService;
@@ -39,44 +42,42 @@ async fn main() -> Result<()> {
 async fn run(matches: &ArgMatches<'_>) -> Result<()> {
     let node_id = matches.value_of("id").unwrap().parse::<Id>().unwrap();
 
-    let (vertex_output_sender, vertex_output_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
-
-    let (vertex_to_broadcast_sender, vertex_to_broadcast_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
-    let (_vertex_to_consensus_sender, vertex_to_consensus_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
-    let (vertex_message_sender, _vertex_message_receiver) = channel::<VertexMessage>(DEFAULT_CHANNEL_CAPACITY);
-    let (block_sender, block_receiver) = channel::<Block>(DEFAULT_CHANNEL_CAPACITY);
+    let (consensus_sender, consensus_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
+    let (gc_round_sender, gc_round_receiver) = tokio::sync::broadcast::channel::<Round>(DEFAULT_CHANNEL_CAPACITY);
+    let (block_sender, block_receiver) = channel::<BlockHash>(DEFAULT_CHANNEL_CAPACITY);
+    let (ordered_vertex_timestamps_sender, ordered_vertex_timestamps_receiver) =
+        channel::<(Vertex, Vec<(Round, Timestamp)>)>(DEFAULT_CHANNEL_CAPACITY);
 
     let storage = Storage::new(matches.value_of("store").unwrap()).context("Failed to create the storage")?;
-
-    VertexService::spawn(
-        node_id,
-        Committee::default(),
-        vertex_message_sender,
-        vertex_to_broadcast_receiver
-    );
+    let committee = Committee::default();
+    let node_key = committee.get_node_key(node_id).expect(format!("Node public key not found for the id {}", node_id).as_str());
 
     TransactionService::spawn(
         node_id,
-        Committee::default(),
-        storage,
-        block_sender
+        committee.clone(),
+        storage.clone(),
+        block_sender,
     );
 
-    /*Consensus::spawn(
-        node_id,
-        Committee::default(),
-        vertex_to_consensus_receiver,
-        vertex_to_broadcast_sender,
-        vertex_output_sender,
+    VertexService::spawn(
+        node_key,
+        committee.clone(),
+        storage,
+        consensus_sender,
+        gc_round_receiver,
         block_receiver
-    );*/
+    );
 
-    wait_and_print_vertexs(vertex_output_receiver).await;
+    Consensus::spawn(
+        committee,
+        consensus_receiver,
+        ordered_vertex_timestamps_sender
+    );
+
+    GarbageCollector::spawn(
+        ordered_vertex_timestamps_receiver,
+        gc_round_sender
+    );
+
     unreachable!();
-}
-
-async fn wait_and_print_vertexs(mut vertex_output_receiver: Receiver<Vertex>) {
-    while let Some(vertex) = vertex_output_receiver.recv().await {
-        info!("Vertex committed: {}", vertex)
-    }
 }

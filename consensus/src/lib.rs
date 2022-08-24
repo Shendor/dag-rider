@@ -1,3 +1,3 @@
 mod state;
-mod garbage_collector;
-mod consensus;
+pub mod garbage_collector;
+pub mod consensus;

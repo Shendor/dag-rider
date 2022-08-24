@@ -10,18 +10,19 @@ use model::vertex::Vertex;
 use network::ReliableSender;
 use crate::vertex_message_handler::VertexMessage;
 
+/// The maximum delay to wait for blocks.
+const MAX_VERTEX_DELAY: u64 = 1000;
+
 /// The proposer creates new vertices and send them to the VertexAggregator for further processing.
 pub struct Proposer {
     node_key: NodePublicKey,
     /// The committee information.
     committee: Committee,
-    /// The maximum delay to wait for batches' digests.
-    max_vertex_delay: u64,
 
     /// Receives vertices of the round which can be a parent to a new one for proposal
-    vertices_receiver: Receiver<(Vec<Vertex>, Round)>,
+    parent_vertices_receiver: Receiver<(Vec<Vertex>, Round)>,
     /// Sends a new vertex to the Vertex Aggregator
-    vertex_sender: Sender<Vertex>,
+    proposed_vertex_sender: Sender<Vertex>,
     /// Receives the block hashes from the Block Builder.
     block_receiver: Receiver<BlockHash>,
 
@@ -40,9 +41,8 @@ impl Proposer {
     pub fn spawn(
         node_key: NodePublicKey,
         committee: Committee,
-        max_vertex_delay: u64,
-        vertices_receiver: Receiver<(Vec<Vertex>, Round)>,
-        vertex_sender: Sender<Vertex>,
+        parent_vertices_receiver: Receiver<(Vec<Vertex>, Round)>,
+        proposed_vertex_sender: Sender<Vertex>,
         block_receiver: Receiver<BlockHash>,
         network: ReliableSender,
     ) {
@@ -52,9 +52,8 @@ impl Proposer {
             Self {
                 node_key,
                 committee,
-                max_vertex_delay,
-                vertices_receiver,
-                vertex_sender,
+                parent_vertices_receiver,
+                proposed_vertex_sender,
                 block_receiver,
                 network,
                 round: 0,
@@ -72,7 +71,7 @@ impl Proposer {
         debug!("Dag starting at round {}", self.round);
         let mut can_proceed = true;
 
-        let timer = sleep(Duration::from_millis(self.max_vertex_delay));
+        let timer = sleep(Duration::from_millis(MAX_VERTEX_DELAY));
         tokio::pin!(timer);
 
         loop {
@@ -96,14 +95,14 @@ impl Proposer {
                 self.create_vertex().await;
 
                 // Reschedule the timer.
-                let deadline = Instant::now() + Duration::from_millis(self.max_vertex_delay);
+                let deadline = Instant::now() + Duration::from_millis(MAX_VERTEX_DELAY);
                 timer.as_mut().reset(deadline);
             }
 
             tokio::select! {
                 // Receive vertices from the Vertex Aggregator when it reaches the quorum
                 // and use these vertices as parents for a future proposed vertex.
-                Some((parents, round)) = self.vertices_receiver.recv() => {
+                Some((parents, round)) = self.parent_vertices_receiver.recv() => {
                     // Compare the parents' round number with our current round.
                     match round.cmp(&self.round) {
                         Ordering::Greater => {

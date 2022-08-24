@@ -1,4 +1,4 @@
-use log::{debug, info, warn};
+use log::debug;
 use tokio::sync::mpsc::{Receiver, Sender};
 use model::committee::Committee;
 use model::{Round, Timestamp};
@@ -8,13 +8,12 @@ use crate::state::State;
 pub struct Consensus {
     /// The committee information.
     committee: Committee,
+    state: State,
 
     /// Receives new vertices from the `VertexAggregator`.
     vertex_receiver: Receiver<Vertex>,
-    ordered_vertex_timestamps_sender: Sender<(Vertex, Vec<(Round, Timestamp)>)>,
 
-    state: State,
-    genesis: Vec<Vertex>,
+    ordered_vertex_timestamps_sender: Sender<(Vertex, Vec<(Round, Timestamp)>)>,
 }
 
 impl Consensus {
@@ -24,21 +23,16 @@ impl Consensus {
         ordered_vertex_timestamps_sender: Sender<(Vertex, Vec<(Round, Timestamp)>)>
     ) {
         tokio::spawn(async move {
-            let genesis = Vertex::genesis(committee.get_nodes_keys());
             Self {
                 committee: committee.clone(),
                 vertex_receiver,
                 ordered_vertex_timestamps_sender,
-                state: State::new(genesis.clone()),
-                genesis,
+                state: State::new(Vertex::genesis(committee.get_nodes_keys())),
             }.run().await;
         });
     }
 
     async fn run(&mut self) {
-        // The consensus state (everything else is immutable).
-        // let mut state = State::new(self.genesis.clone());
-
         // Listen to incoming vertices.
         while let Some(vertex) = self.vertex_receiver.recv().await {
             debug!("Processing {:?}", vertex);

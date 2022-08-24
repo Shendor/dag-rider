@@ -23,8 +23,8 @@ pub struct VertexAggregator {
     /// Output all vertices to the consensus layer.
     consensus_sender: Sender<Vertex>,
     /// Sends a quorum of created vertices to the Proposer so they can be attached
-    /// as parents for a new vertex
-    proposer_sender: Sender<(Vec<Vertex>, Round)>,
+    /// as parents for a new vertex.
+    parents_sender: Sender<(Vec<Vertex>, Round)>,
     /// Receives our newly created vertices from the `Proposer`.
     proposer_receiver: Receiver<Vertex>,
     /// Send commands to the `VertexSynchronizer`.
@@ -42,9 +42,9 @@ impl VertexAggregator {
         committee: Committee,
         storage: Storage,
         vertex_message_receiver: Receiver<VertexMessage>,
+        parents_sender: Sender<(Vec<Vertex>, Round)>,
         proposer_receiver: Receiver<Vertex>,
         consensus_sender: Sender<Vertex>,
-        proposer_sender: Sender<(Vec<Vertex>, Round)>,
         vertex_sync_sender: Sender<SyncMessage>,
         vertex_sync_receiver: Receiver<Vertex>,
     ) {
@@ -54,9 +54,9 @@ impl VertexAggregator {
                 committee,
                 storage,
                 vertex_message_receiver,
-                consensus_sender,
-                proposer_sender,
+                parents_sender,
                 proposer_receiver,
+                consensus_sender,
                 vertex_sync_sender,
                 vertex_sync_receiver,
                 new_vertices: HashMap::new(),
@@ -80,7 +80,7 @@ impl VertexAggregator {
                 // We receive here loopback vertices from the `VertexSynchronizer`. Those are vertices for which
                 // we interrupted execution (we were missing some of their ancestors) and we are now ready to resume
                 // processing.
-                Some(vertex) = self.vertex_sync_receiver.recv() => self.process_vertex(&vertex).await,
+                // Some(vertex) = self.vertex_sync_receiver.recv() => self.process_vertex(&vertex).await,
 
                 // Receive new vertices from the Proposer.
                 Some(vertex) = self.proposer_receiver.recv() => self.process_vertex(&vertex).await,
@@ -119,7 +119,7 @@ impl VertexAggregator {
         // Check if we have enough vertices to enter a new dag round and propose a new vertex.
         if let Some(parents) = self.add_vertex(vertex.clone())
         {
-            self.proposer_sender
+            self.parents_sender
                 .send((parents, round))
                 .await
                 .expect("Failed to send parents for the vertex round");
@@ -163,10 +163,11 @@ impl VertexAggregator {
         if missing_vertices.is_empty() {
             return Ok(parents.iter().map(|p| bincode::deserialize(&p).unwrap()).collect());
         } else {
-            self.vertex_sync_sender
-                .send(SyncMessage::SyncParentVertices(missing_vertices, vertex.clone()))
-                .await
-                .expect("Failed to send sync parents request");
+            warn!("Not all parents found in the storage for vertex '{}'. Start to synchronize...", vertex.encoded_hash());
+            // self.vertex_sync_sender
+            //     .send(SyncMessage::SyncParentVertices(missing_vertices, vertex.clone()))
+            //     .await
+            //     .expect("Failed to send sync parents request");
             Ok(Vec::new())
         }
     }

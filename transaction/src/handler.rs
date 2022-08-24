@@ -1,4 +1,4 @@
-use model::block::{Block, Transaction};
+use model::block::{Block, BlockHash, Transaction};
 use tokio::sync::mpsc::{Sender};
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -38,7 +38,7 @@ impl MessageHandler for ReceiveTxHandler {
 #[derive(Clone)]
 pub struct ReceiveBlockHandler {
     /// Sends a block to the Consensus layer so it can be added to a vertex
-    pub(crate) block_sender: Sender<Block>,
+    pub(crate) block_sender: Sender<BlockHash>,
     /// Storage for saving blocks
     pub(crate) storage: Storage
 }
@@ -53,9 +53,8 @@ impl MessageHandler for ReceiveBlockHandler {
                 info!("Received a block to process with {} transactions. Sending it to Consensus", block.transactions.len());
                 self.storage.write(block.hash().to_vec(), serialized.to_vec()).await;
 
-                self
-                    .block_sender
-                    .send(block)
+                self.block_sender
+                    .send(block.hash())
                     .await
                     .expect("Failed to send block")
             }
