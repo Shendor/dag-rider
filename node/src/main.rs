@@ -4,7 +4,6 @@ use env_logger::Env;
 use log::info;
 use tokio::sync::mpsc::{channel, Receiver};
 
-use consensus::Consensus;
 use model::block::Block;
 use model::committee::{Committee, Id};
 use model::vertex::Vertex;
@@ -63,14 +62,14 @@ async fn run(matches: &ArgMatches<'_>) -> Result<()> {
         block_sender
     );
 
-    Consensus::spawn(
+    /*Consensus::spawn(
         node_id,
         Committee::default(),
         vertex_to_consensus_receiver,
         vertex_to_broadcast_sender,
         vertex_output_sender,
         block_receiver
-    );
+    );*/
 
     wait_and_print_vertexs(vertex_output_receiver).await;
     unreachable!();

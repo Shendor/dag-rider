@@ -2,6 +2,7 @@ use thiserror::Error;
 
 pub const DEFAULT_CHANNEL_CAPACITY: usize = 1_000;
 
+pub type Timestamp = u128;
 pub type Round = u64;
 pub type Wave = u64;
 

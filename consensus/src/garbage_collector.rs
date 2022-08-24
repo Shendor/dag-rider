@@ -1,6 +1,7 @@
-use std::collections::{BTreeMap, BTreeSet};
-use tokio::sync::mpsc::{Receiver, Sender};
-use model::Round;
+use std::collections::{BTreeSet, HashMap};
+use tokio::sync::broadcast::Sender;
+use tokio::sync::mpsc::{Receiver};
+use model::{Round, Timestamp};
 use model::vertex::Vertex;
 
 const GC_DELTA_TIME: u128 = 3 * 100000;
@@ -9,14 +10,15 @@ const GC_DELTA_TIME: u128 = 3 * 100000;
 pub struct GarbageCollector {
     /// Receives the leader and timings of ordered vertices for this leader.
     /// The timings are grouped by rounds so GC can calculate median time per round.
-    ordered_vertex_timestamps_receiver: Receiver<(Vertex, BTreeMap<Round, BTreeSet<u128>>)>,
+    ordered_vertex_timestamps_receiver: Receiver<(Vertex, Vec<(Round, Timestamp)>)>,
+    /// A broadcast sender which notifies all participants about a garbage collected round.
     gc_round_sender: Sender<Round>,
     gc_round: Round,
 }
 
 impl GarbageCollector {
     pub fn spawn(
-        ordered_vertex_timestamps_receiver: Receiver<(Vertex, BTreeMap<Round, BTreeSet<u128>>)>,
+        ordered_vertex_timestamps_receiver: Receiver<(Vertex, Vec<(Round, Timestamp)>)>,
         gc_round_sender: Sender<Round>
     ) {
         tokio::spawn(async move {
@@ -31,14 +33,16 @@ impl GarbageCollector {
     async fn run(&mut self) {
         while let Some((leader, ordered_vertex_timestamps)) = self.ordered_vertex_timestamps_receiver.recv().await {
 
-            let leader_ts = Self::median_timestamp(&leader.parents().iter().map(|(_, (_, timestamp))| *timestamp).collect::<BTreeSet<u128>>());
+            let leader_ts = Self::median_timestamp(&leader.parents().iter().map(|(_, (_, timestamp))| *timestamp).collect::<BTreeSet<Timestamp>>());
 
             let round = leader.round();
             if round > self.gc_round {
                 let mut r = self.gc_round + 1;
 
+                let timestamps_per_round = Self::group_timestamps_by_round(ordered_vertex_timestamps);
+
                 while r < round - 1 {
-                    let round_ts = match ordered_vertex_timestamps.get(&r) {
+                    let round_ts = match timestamps_per_round.get(&r) {
                         Some(timestamps) => Self::median_timestamp(timestamps),
                         None => leader_ts
                     };
@@ -51,6 +55,14 @@ impl GarbageCollector {
                 }
             }
         }
+    }
+
+    fn group_timestamps_by_round(ordered_vertex_timestamps: Vec<(Round, Timestamp)>) -> HashMap<Round, BTreeSet<Timestamp>> {
+        let mut timestamps_per_round: HashMap<Round, BTreeSet<Timestamp>> = HashMap::new();
+        ordered_vertex_timestamps.into_iter().for_each(|(r, t)| {
+            timestamps_per_round.entry(r).or_insert(BTreeSet::new()).insert(t);
+        });
+        timestamps_per_round
     }
 
     fn median_timestamp(timestamps: &BTreeSet<u128>) -> u128 {
