@@ -1,5 +1,7 @@
 use std::cmp::max;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::fmt::{Display, Formatter};
+use log::debug;
 
 use model::Round;
 use model::vertex::{Vertex, VertexHash};
@@ -51,25 +53,11 @@ impl State {
             .insert(vertex.hash(), vertex);
     }
 
-    pub fn contains_vertices(&self, vertices: &BTreeMap<VertexHash, (Round, u128)>) -> bool {
-        vertices.iter()
-                .all(|(vertex_hash,
-                          (round, _))| self.dag.get(round)
-                                           .map_or_else(|| false, |v| v.contains_key(vertex_hash)))
-    }
-
     pub fn get_vertices(&self, round: &Round) -> BTreeMap<VertexHash, (Round, u128)> {
         match self.dag.get(round) {
             Some(v) => v.iter().map(|(h, v)| (*h, (v.round(), v.created_time()))).collect(),
             None => BTreeMap::default()
         }
-    }
-
-    fn find_vertex_from_hash(&self, vertex_hash: &VertexHash, round: &Round) -> Option<&Vertex> {
-        self.dag
-            .get(round)
-            .map(|vertices| vertices.get(vertex_hash))
-            .flatten()
     }
 
     pub fn get_votes_for_vertex(&self, vertex_hash: &VertexHash, round: &Round) -> usize {
@@ -103,5 +91,40 @@ impl State {
 
     pub fn get_vertex(&self, vertex_hash: &VertexHash, round: &Round) -> Option<&Vertex> {
         self.dag.get(round).map_or_else(|| None, |v| v.get(vertex_hash))
+    }
+}
+
+impl Display for State {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut vertex_ids = HashMap::new();
+        for (r, vertices) in &self.dag {
+            let mut line = format!("{}: ", r.to_string());
+
+            let mut c = 1;
+            for (hash, vertex) in vertices {
+                vertex_ids.insert(hash, c);
+
+                let mut parents_line = String::new();
+                for (parent, (round, _)) in vertex.parents() {
+                    if let Some(id) = vertex_ids.get(parent) {
+                        parents_line.push_str(format!(" {}-{}", round, id).as_str());
+                    }
+                }
+
+                if parents_line.is_empty() {
+                    line.push_str(format!("(V{})", c).as_str());
+                } else {
+                    line.push_str(format!("(V{})[{} ]", c, parents_line).as_str());
+                }
+                if c < vertices.len() {
+                    line.push_str(" --- ");
+                }
+
+                c += 1;
+            }
+            line.push_str("\n");
+            write!(f, "{}", line);
+        }
+        Ok(())
     }
 }

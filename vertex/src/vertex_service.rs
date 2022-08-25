@@ -24,27 +24,26 @@ impl VertexService {
         gc_message_receiver: tokio::sync::broadcast::Receiver<Round>,
         block_receiver: Receiver<BlockHash>
     ) {
-        let (vertex_message_sender, vertex_message_receiver) = channel::<VertexMessage>(DEFAULT_CHANNEL_CAPACITY);
+        let (vertex_sender, vertex_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
         let (proposed_vertex_sender, proposed_vertex_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
         let (parents_sender, parents_receiver) = channel::<(Vec<Vertex>, Round)>(DEFAULT_CHANNEL_CAPACITY);
         let (sync_message_sender, sync_message_receiver) = channel::<SyncMessage>(DEFAULT_CHANNEL_CAPACITY);
         let (vertex_sync_sender, vertex_sync_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
 
         // Spawn the network receiver listening to vertices broadcast from the other nodes.
-        debug!("Start listening for vertices from other nodes");
         let address = committee.get_node_address_by_key(&node_key)
-            .expect("VertexService: Node address was not found in the committee for the provided public key");
+            .expect("Node address was not found in the committee for the provided public key");
         NetworkReceiver::spawn(
             address,
-            VertexReceiverHandler { vertex_message_sender },
+            VertexReceiverHandler { vertex_sender },
         );
-        info!("Vertex Coordinator listening to the messages on {}", address);
+        info!("VertexReceiverHandler is listening to the messages on {}", address);
 
         VertexAggregator::spawn(
             node_key,
             committee.clone(),
             storage,
-            vertex_message_receiver,
+            vertex_receiver,
             parents_sender,
             proposed_vertex_receiver,
             consensus_sender,

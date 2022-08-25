@@ -35,13 +35,14 @@ impl Vertex {
             round,
             blocks,
             parents,
-            timestamp: now,
+            timestamp: 0,
             hash: VertexHash::default(),
         };
         let encoded = bincode::serialize(&vertex).unwrap();
         let hash = blake3::hash(&encoded).as_bytes().clone();
         Self {
             hash,
+            timestamp: now,
             ..vertex
         }
     }

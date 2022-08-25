@@ -1,10 +1,12 @@
 use std::collections::{BTreeSet, HashMap};
+use log::info;
 use tokio::sync::broadcast::Sender;
 use tokio::sync::mpsc::{Receiver};
 use model::{Round, Timestamp};
 use model::vertex::Vertex;
 
-const GC_DELTA_TIME: u128 = 3 * 100000;
+/// Everything older than 3 sec must be cleaned up.
+const GC_DELTA_TIME: u128 = 3 * 1000;
 
 /// Receives the highest round reached by consensus and update it for all tasks.
 pub struct GarbageCollector {
@@ -76,6 +78,7 @@ impl GarbageCollector {
     }
 
     fn notify_gc_round(&mut self) {
+        info!("Round {} has been cleaned up", self.gc_round);
         self.gc_round_sender.send(self.gc_round);
     }
 }

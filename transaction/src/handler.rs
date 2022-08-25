@@ -50,7 +50,7 @@ impl MessageHandler for ReceiveBlockHandler {
 
         match bincode::deserialize(&serialized) {
             Ok(BlockMessage::Block(block)) => {
-                info!("Received a block to process with {} transactions. Sending it to Consensus", block.transactions.len());
+                info!("Received a block to process with {} transactions. Sending it to Proposer", block.transactions.len());
                 self.storage.write(block.hash().to_vec(), serialized.to_vec()).await;
 
                 self.block_sender

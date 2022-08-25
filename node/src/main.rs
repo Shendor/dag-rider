@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use anyhow::{Context, Result};
 use clap::{App, ArgMatches, SubCommand};
 use env_logger::Env;
@@ -48,8 +49,12 @@ async fn run(matches: &ArgMatches<'_>) -> Result<()> {
     let (ordered_vertex_timestamps_sender, ordered_vertex_timestamps_receiver) =
         channel::<(Vertex, Vec<(Round, Timestamp)>)>(DEFAULT_CHANNEL_CAPACITY);
 
-    let storage = Storage::new(matches.value_of("store").unwrap()).context("Failed to create the storage")?;
     let committee = Committee::default();
+    let genesis = Vertex::genesis(committee.get_nodes_keys()).iter()
+        .map(|v| (v.hash().to_vec(), bincode::serialize(v).expect("Failed to serialize vertex")))
+        .collect::<HashMap<Vec<u8>, Vec<u8>>>();
+    // let storage = Storage::new(matches.value_of("store").unwrap()).context("Failed to create the storage")?;
+    let storage = Storage::new(genesis).context("Failed to create the storage")?;
     let node_key = committee.get_node_key(node_id).expect(format!("Node public key not found for the id {}", node_id).as_str());
 
     TransactionService::spawn(
@@ -64,7 +69,7 @@ async fn run(matches: &ArgMatches<'_>) -> Result<()> {
         committee.clone(),
         storage,
         consensus_sender,
-        gc_round_receiver,
+        gc_round_sender.subscribe(),
         block_receiver
     );
 
@@ -79,5 +84,15 @@ async fn run(matches: &ArgMatches<'_>) -> Result<()> {
         gc_round_sender
     );
 
+    wait_and_print_gc_rounds(gc_round_receiver).await;
+    // Ok(())
     unreachable!();
+}
+
+async fn wait_and_print_gc_rounds(mut gc_round_receiver: tokio::sync::broadcast::Receiver<Round>) {
+    loop {
+        if let Ok(gc_round) = gc_round_receiver.recv().await {
+            info!("GC round: {}", gc_round);
+        }
+    }
 }

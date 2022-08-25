@@ -24,7 +24,7 @@ impl TransactionService {
         debug!("Start listening for transactions on {:?}", tx_address);
         Receiver::spawn(
             tx_address,
-            ReceiveTxHandler { transaction_sender  },
+            ReceiveTxHandler { transaction_sender },
         );
 
         let address = committee.get_block_receiver_address(node_id).unwrap();

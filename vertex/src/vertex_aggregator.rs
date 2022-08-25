@@ -1,6 +1,6 @@
 use crate::error::{VertexError, VertexResult};
 use async_recursion::async_recursion;
-use log::{debug, error, warn};
+use log::{debug, error, info, warn};
 use std::collections::HashMap;
 use tokio::sync::mpsc::{Receiver, Sender};
 use model::committee::{Committee, NodePublicKey};
@@ -19,7 +19,7 @@ pub struct VertexAggregator {
     storage: Storage,
 
     /// Receiver for dag messages.
-    vertex_message_receiver: Receiver<VertexMessage>,
+    vertex_receiver: Receiver<Vertex>,
     /// Output all vertices to the consensus layer.
     consensus_sender: Sender<Vertex>,
     /// Sends a quorum of created vertices to the Proposer so they can be attached
@@ -41,7 +41,7 @@ impl VertexAggregator {
         node_key: NodePublicKey,
         committee: Committee,
         storage: Storage,
-        vertex_message_receiver: Receiver<VertexMessage>,
+        vertex_receiver: Receiver<Vertex>,
         parents_sender: Sender<(Vec<Vertex>, Round)>,
         proposer_receiver: Receiver<Vertex>,
         consensus_sender: Sender<Vertex>,
@@ -53,7 +53,7 @@ impl VertexAggregator {
                 node_key,
                 committee,
                 storage,
-                vertex_message_receiver,
+                vertex_receiver,
                 parents_sender,
                 proposer_receiver,
                 consensus_sender,
@@ -68,13 +68,8 @@ impl VertexAggregator {
         loop {
             let result = tokio::select! {
                 // We receive here messages from other nodes.
-                Some(message) = self.vertex_message_receiver.recv() => {
-                    match message {
-                        VertexMessage::NewVertex(vertex) => {
-                            self.process_vertex(&vertex).await
-                        },
-                        _ => panic!("Unexpected message received in Vertex Aggregator")
-                    }
+                Some(vertex) = self.vertex_receiver.recv() => {
+                    self.process_vertex(vertex).await
                 },
 
                 // We receive here loopback vertices from the `VertexSynchronizer`. Those are vertices for which
@@ -83,42 +78,38 @@ impl VertexAggregator {
                 // Some(vertex) = self.vertex_sync_receiver.recv() => self.process_vertex(&vertex).await,
 
                 // Receive new vertices from the Proposer.
-                Some(vertex) = self.proposer_receiver.recv() => self.process_vertex(&vertex).await,
+                Some(vertex) = self.proposer_receiver.recv() => self.process_vertex(vertex).await,
             };
 
             match result {
                 Ok(()) => (),
-                Err(e) => error!("{:?}", e),
+                Err(e) => error!("Unexpected error: {:?}", e),
             }
         }
     }
 
     #[async_recursion]
-    async fn process_vertex(&mut self, vertex: &Vertex) -> VertexResult<()> {
-        debug!("Processing {:?}", vertex);
+    async fn process_vertex(&mut self, vertex: Vertex) -> VertexResult<()> {
+        debug!("Processing vertex {}", vertex.encoded_hash());
         let vertex_hash = vertex.hash();
         let round = vertex.round();
 
-        // Ensure we have the parents. If at least one parent is missing, the synchronizer returns an empty
-        // vector. It will gather the missing parents (as well as all ancestors) from other nodes and then
-        // reschedule processing of this header.
-        let parents = self.get_parents(vertex).await?;
-        if parents.is_empty() {
-            debug!("Processing of {} suspended: missing parent(s)", vertex.encoded_hash());
+        // Ensure we have the parents. If at least one parent is missing, the synchronizer returns true
+        // which means that synchronization is needed and it will gather the missing parents
+        // (as well as all ancestors) from other nodes and then reschedule processing of this header.
+        if self.sync_parents(&vertex).await? {
+            debug!("Parents not sync for vertex {}. Suspend its processing until it's sync", vertex.encoded_hash());
             return Ok(());
         }
 
-        if parents.len() >= self.committee.quorum_threshold() {
-            return Err(VertexError::VertexParentsQuorumFailed(vertex.encoded_hash(), self.committee.quorum_threshold()));
-        }
-
         // Store the vertex.
-        let bytes = bincode::serialize(vertex).expect("Failed to serialize vertex");
+        let bytes = bincode::serialize(&vertex).expect("Failed to serialize vertex");
         self.storage.write(vertex_hash.to_vec(), bytes).await;
 
         // Check if we have enough vertices to enter a new dag round and propose a new vertex.
         if let Some(parents) = self.add_vertex(vertex.clone())
         {
+            info!("Received enough parents for round {}. Sending it to the Proposer", round);
             self.parents_sender
                 .send((parents, round))
                 .await
@@ -126,9 +117,7 @@ impl VertexAggregator {
         }
 
         // Send it to the consensus layer.
-        if let Err(e) = self.consensus_sender.send(vertex.clone()).await {
-            warn!("Failed to deliver vertex {} to the consensus: {}", vertex.encoded_hash(), e);
-        }
+        self.consensus_sender.send(vertex).await;
 
         Ok(())
     }
@@ -150,7 +139,7 @@ impl VertexAggregator {
     /// Returns the parents of a vertex if we have them all. If at least one parent is missing,
     /// we return an empty vector, synchronize with other nodes, and re-schedule processing
     /// of the vertex for when we will have all the parents.
-    async fn get_parents(&mut self, vertex: &Vertex) -> VertexResult<Vec<Vertex>> {
+    async fn sync_parents(&mut self, vertex: &Vertex) -> VertexResult<bool> {
         let mut missing_vertices: Vec<VertexHash> = Vec::new();
         let mut parents = Vec::new();
         for (parent, _) in vertex.parents() {
@@ -161,14 +150,18 @@ impl VertexAggregator {
         }
 
         if missing_vertices.is_empty() {
-            return Ok(parents.iter().map(|p| bincode::deserialize(&p).unwrap()).collect());
+            return if parents.len() < self.committee.quorum_threshold() {
+                 Err(VertexError::VertexParentsQuorumFailed(vertex.encoded_hash(), self.committee.quorum_threshold()))
+            } else {
+                 Ok(false)
+            }
         } else {
             warn!("Not all parents found in the storage for vertex '{}'. Start to synchronize...", vertex.encoded_hash());
             // self.vertex_sync_sender
             //     .send(SyncMessage::SyncParentVertices(missing_vertices, vertex.clone()))
             //     .await
             //     .expect("Failed to send sync parents request");
-            Ok(Vec::new())
+            Ok(true)
         }
     }
 }

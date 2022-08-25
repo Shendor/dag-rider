@@ -1,13 +1,16 @@
 use log::{debug, info, warn};
 use std::cmp::Ordering;
+use std::collections::HashMap;
+use base64::encode;
 use bytes::Bytes;
+use ed25519_dalek::Digest;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::{sleep, Duration, Instant};
 use model::block::BlockHash;
 use model::committee::{Committee, NodePublicKey};
 use model::Round;
 use model::vertex::Vertex;
-use network::ReliableSender;
+use network::{CancelHandler, ReliableSender};
 use crate::vertex_message_handler::VertexMessage;
 
 /// The maximum delay to wait for blocks.
@@ -35,6 +38,7 @@ pub struct Proposer {
     last_leader: Option<Vertex>,
     /// Holds the blocks' hashes waiting to be included in the next vertex.
     blocks: Vec<BlockHash>,
+    cancel_handlers: HashMap<Round, Vec<CancelHandler>>,
 }
 
 impl Proposer {
@@ -46,8 +50,7 @@ impl Proposer {
         block_receiver: Receiver<BlockHash>,
         network: ReliableSender,
     ) {
-        let keys = committee.validators.iter().map(|(_, v)| v.public_key.clone()).collect();
-        let genesis = Vertex::genesis(keys);
+        let genesis = Vertex::genesis(committee.get_nodes_keys());
         tokio::spawn(async move {
             Self {
                 node_key,
@@ -60,6 +63,7 @@ impl Proposer {
                 last_parents: genesis,
                 last_leader: None,
                 blocks: Vec::with_capacity(1000),
+                cancel_handlers: HashMap::new()
             }
             .run()
             .await;
@@ -110,9 +114,11 @@ impl Proposer {
                             // late (or just joined the network).
                             self.round = round;
                             self.last_parents = parents;
+                            info!("Received parents with newer round {}", self.round);
                         },
                         Ordering::Less => {
                             // Ignore parents from older rounds.
+                            warn!("Ignore the received parents with older round {}", round);
                         },
                         Ordering::Equal => {
                             // The core gives us the parents the first time they are enough to form a quorum.
@@ -130,6 +136,7 @@ impl Proposer {
                 }
                 // Receive blocks from Block component
                 Some(block_hash) = self.block_receiver.recv() => {
+                    debug!("Received block {}", encode(block_hash));
                     self.blocks.push(block_hash);
                 }
                 () = &mut timer => {
@@ -147,10 +154,16 @@ impl Proposer {
             self.last_parents.drain(..).map(|v| (v.hash(), (v.round(),v.created_time()))).collect(),
         );
 
+        info!("New vertex created: {}", vertex.encoded_hash());
+
         let addresses = self.committee.get_node_addresses();
         let bytes = bincode::serialize(&VertexMessage::NewVertex(vertex))
             .expect("Failed to serialize the new vertex");
-        self.network.broadcast(addresses, Bytes::from(bytes)).await;
+        let handler = self.network.broadcast(addresses, Bytes::from(bytes)).await;
+        self.cancel_handlers
+            .entry(self.round)
+            .or_insert_with(Vec::new)
+            .extend(handler);
     }
 
     /// Update the last leader.

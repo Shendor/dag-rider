@@ -16,6 +16,8 @@ pub struct Consensus {
     ordered_vertex_timestamps_sender: Sender<(Vertex, Vec<(Round, Timestamp)>)>,
 }
 
+const WAVE: u64 = 2;
+
 impl Consensus {
     pub fn spawn(
         committee: Committee,
@@ -35,45 +37,45 @@ impl Consensus {
     async fn run(&mut self) {
         // Listen to incoming vertices.
         while let Some(vertex) = self.vertex_receiver.recv().await {
-            debug!("Processing {:?}", vertex);
             let round = vertex.round();
+            debug!("Consensus received a vertex {} for round {}", vertex.encoded_hash(), round);
 
             // Add the new vertex to the local storage.
             self.state.insert_vertex(vertex);
 
             // Try to order the dag to commit. Start from the previous round and check if it is a leader round.
-            let r = round - 1;
+            let leader_round = round - 1;
 
             // We only elect leaders for even round numbers.
-            if r % 2 != 0 || r < 2 {
+            if leader_round % WAVE != 0 || leader_round < WAVE {
                 continue;
             }
 
             // Get the vertex's digest of the leader. If we already ordered this leader, there is nothing to do.
-            let leader_round = r;
-            if leader_round <= self.state.last_committed_round {
-                continue;
-            }
-            let leader = match self.leader(leader_round) {
-                Some(x) => x,
-                None => continue,
-            };
+            if leader_round > self.state.last_committed_round {
+                debug!("Start to elect leader for round {}", leader_round);
+                let leader = match self.leader(leader_round) {
+                    Some(x) => x,
+                    None => continue,
+                };
 
-            // Check if the leader has f+1 support from its children (ie. round r-1).
-            // If it is the case, we can commit the leader. But first, we need to recursively go back to
-            // the last committed leader, and commit all preceding leaders in the right order. Committing
-            // a leader block means committing all its dependencies.
-            if self.state.get_votes_for_vertex(&leader.hash(), &round) < self.committee.validity_threshold() {
-                debug!("Leader {:?} does not have enough support", leader);
-                continue;
-            }
+                // Check if the leader has f+1 support from its children (ie. round r-1).
+                // If it is the case, we can commit the leader. But first, we need to recursively go back to
+                // the last committed leader, and commit all preceding leaders in the right order. Committing
+                // a leader block means committing all its dependencies.
+                if self.state.get_votes_for_vertex(&leader.hash(), &round) < self.committee.validity_threshold() {
+                    debug!("Leader {} does not have enough support", leader.encoded_hash());
+                    continue;
+                }
 
-            // Get an ordered list of past leaders that are linked to the current leader.
-            debug!("Leader {:?} has enough support", leader);
-            for leader in self.order_leaders(leader).iter().rev() {
-                // Starting from the oldest leader, flatten the sub-dag referenced by the leader.
-                let ordered_vertices = self.order_dag(leader);
-                self.notify_gc(leader, &ordered_vertices);
+                // Get an ordered list of past leaders that are linked to the current leader.
+                debug!("Leader {} has enough support", leader.encoded_hash());
+                for leader in self.order_leaders(leader).iter().rev() {
+                    // Starting from the oldest leader, flatten the sub-dag referenced by the leader.
+                    let ordered_vertices = self.order_dag(leader);
+                    self.notify_gc(leader, &ordered_vertices);
+                }
+                debug!("Vertices has been ordered from round {}. Current DAG:\n {}", round, self.state);
             }
         }
     }
@@ -88,7 +90,6 @@ impl Consensus {
         // Elect the leader.
         let leader = self.committee.leader(seed as usize);
 
-        // Return its vertex and the vertex's digest.
         self.state.get_vertex(&leader, &round)
     }
 
