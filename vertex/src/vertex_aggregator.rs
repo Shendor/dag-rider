@@ -34,6 +34,8 @@ pub struct VertexAggregator {
 
     /// Aggregates vertices to use as parents for a new vertex.
     new_vertices: HashMap<Round, Vec<Vertex>>,
+    gc_message_receiver: tokio::sync::broadcast::Receiver<Round>,
+
 }
 
 impl VertexAggregator {
@@ -47,6 +49,7 @@ impl VertexAggregator {
         consensus_sender: Sender<Vertex>,
         vertex_sync_sender: Sender<SyncMessage>,
         vertex_sync_receiver: Receiver<Vertex>,
+        gc_message_receiver: tokio::sync::broadcast::Receiver<Round>,
     ) {
         tokio::spawn(async move {
             Self {
@@ -59,6 +62,7 @@ impl VertexAggregator {
                 consensus_sender,
                 vertex_sync_sender,
                 vertex_sync_receiver,
+                gc_message_receiver,
                 new_vertices: HashMap::new(),
             }.run().await;
         });
@@ -79,6 +83,10 @@ impl VertexAggregator {
 
                 // Receive new vertices from the Proposer.
                 Some(vertex) = self.proposer_receiver.recv() => self.process_vertex(vertex).await,
+                Result::Ok(gc_round) = self.gc_message_receiver.recv() => {
+                    debug!("GC round: {}", gc_round);
+                    Ok(())
+                },
             };
 
             match result {

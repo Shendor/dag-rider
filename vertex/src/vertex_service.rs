@@ -48,7 +48,8 @@ impl VertexService {
             proposed_vertex_receiver,
             consensus_sender,
             sync_message_sender,
-            vertex_sync_receiver
+            vertex_sync_receiver,
+            gc_message_receiver
         );
 
         Proposer::spawn(

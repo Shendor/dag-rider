@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use anyhow::{Context, Result};
 use clap::{App, ArgMatches, SubCommand};
 use env_logger::Env;
@@ -46,8 +46,6 @@ async fn run(matches: &ArgMatches<'_>) -> Result<()> {
     let (consensus_sender, consensus_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
     let (gc_round_sender, gc_round_receiver) = tokio::sync::broadcast::channel::<Round>(DEFAULT_CHANNEL_CAPACITY);
     let (block_sender, block_receiver) = channel::<BlockHash>(DEFAULT_CHANNEL_CAPACITY);
-    let (ordered_vertex_timestamps_sender, ordered_vertex_timestamps_receiver) =
-        channel::<(Vertex, Vec<(Round, Timestamp)>)>(DEFAULT_CHANNEL_CAPACITY);
 
     let committee = Committee::default();
     let genesis = Vertex::genesis(committee.get_nodes_keys()).iter()
@@ -76,12 +74,7 @@ async fn run(matches: &ArgMatches<'_>) -> Result<()> {
     Consensus::spawn(
         committee,
         consensus_receiver,
-        ordered_vertex_timestamps_sender
-    );
-
-    GarbageCollector::spawn(
-        ordered_vertex_timestamps_receiver,
-        gc_round_sender
+        GarbageCollector::new(gc_round_sender)
     );
 
     wait_and_print_gc_rounds(gc_round_receiver).await;

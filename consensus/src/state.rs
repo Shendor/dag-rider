@@ -1,13 +1,16 @@
+use std::borrow::Borrow;
 use std::cmp::max;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::{Display, Formatter};
+use std::str::Chars;
 use log::debug;
+use model::committee::NodePublicKey;
 
-use model::Round;
+use model::{Round, Timestamp};
 use model::vertex::{Vertex, VertexHash};
 
 /// The representation of the DAG in memory.
-type Dag = HashMap<Round, HashMap<VertexHash, Vertex>>;
+type Dag = BTreeMap<Round, HashMap<VertexHash, Vertex>>;
 
 /// The state that needs to be persisted for crash-recovery.
 pub struct State {
@@ -33,6 +36,7 @@ impl State {
         }
     }
 
+    /// Mark vertex as delivered for the round
     pub fn set_vertex_as_delivered(&mut self, vertex_hash: &VertexHash, round: &Round) -> Option<Vertex> {
         if let Some(vertex) = self.dag
                                   .get(&round)
@@ -46,6 +50,7 @@ impl State {
         return None;
     }
 
+    /// Add vertex to the DAG
     pub fn insert_vertex(&mut self, vertex: Vertex) {
         self.dag
             .entry(vertex.round())
@@ -53,13 +58,22 @@ impl State {
             .insert(vertex.hash(), vertex);
     }
 
-    pub fn get_vertices(&self, round: &Round) -> BTreeMap<VertexHash, (Round, u128)> {
-        match self.dag.get(round) {
-            Some(v) => v.iter().map(|(h, v)| (*h, (v.round(), v.created_time()))).collect(),
-            None => BTreeMap::default()
-        }
+    /// Get created times of vertices, grouped by round.
+    /// This data can be used to find out which rounds can be cleaned up in the DAG.
+    pub fn get_timings_before_round(&self, round: Round) -> HashMap<Round, BTreeSet<Timestamp>> {
+        let mut grouped_timestamps_per_round: HashMap<Round, BTreeSet<Timestamp>> = HashMap::new();
+        self.dag.iter()
+            .filter(|(r, _)| **r < round)
+            .for_each(|(r, values)| {
+                values.iter().for_each(|(_, v)| {
+                    grouped_timestamps_per_round.entry(*r).or_insert(BTreeSet::new()).insert(v.created_time());
+                });
+            });
+        grouped_timestamps_per_round
     }
 
+    /// Get the number of children of the `vertex_hash`, which implies the number
+    /// of the votes for the vertex.
     pub fn get_votes_for_vertex(&self, vertex_hash: &VertexHash, round: &Round) -> usize {
         self.dag
             .get(round)
@@ -69,6 +83,7 @@ impl State {
                               .count())
     }
 
+    /// Verify if there is a path between 2 vertices via strong edges.
     pub fn is_strongly_connected(&self, leader: &Vertex, previous_leader: &Vertex) -> bool {
         let mut parents = HashMap::new();
         parents.insert(leader.hash(), leader);
@@ -80,7 +95,7 @@ impl State {
                           .get(&r)
                           .expect("We should have the whole history by now")
                           .iter()
-                          .filter(|(h, _)| parents.iter().any(|(_, p)| p.get_strong_parents().contains_key(*h)))
+                          .filter(|(h, _)| parents.iter().any(|(_, p)| p.parents().contains_key(*h)))
                           .map(|(h, v)| (*h, v))
                           .collect::<HashMap<VertexHash, &Vertex>>();
         }
@@ -88,9 +103,18 @@ impl State {
         parents.contains_key(&previous_leader.hash())
     }
 
+    pub fn get_vertex(&self, vertex_owner: &NodePublicKey, round: &Round) -> Option<&Vertex> {
+        //TODO: Find a quicker way to get a leader vertex
+        self.dag.get(round).map_or_else(|| None, |vertices| vertices.values().find(|v| v.owner() == *vertex_owner))
+    }
 
-    pub fn get_vertex(&self, vertex_hash: &VertexHash, round: &Round) -> Option<&Vertex> {
-        self.dag.get(round).map_or_else(|| None, |v| v.get(vertex_hash))
+    pub fn get_vertex_leader(&self, round: &Round) -> Option<&Vertex> {
+        self.dag.get(round).map_or_else(|| None, |vertices| vertices.values().next())
+    }
+
+    /// Clean all vertices from the beginning to the provided round.
+    pub fn clean_before_round(&mut self, round: &Round) {
+        self.dag.retain(|r, _| r > round)
     }
 }
 
@@ -107,14 +131,23 @@ impl Display for State {
                 let mut parents_line = String::new();
                 for (parent, (round, _)) in vertex.parents() {
                     if let Some(id) = vertex_ids.get(parent) {
-                        parents_line.push_str(format!(" {}-{}", round, id).as_str());
+                        // if link to the previous round, then skip displaying it
+                        // otherwise it's a weak link then show the round number
+                        // for the parent vertex.
+                        if *r - *round == 1 {
+                            parents_line.push_str(format!(" v{}", id).as_str());
+                        } else {
+                            parents_line.push_str(format!(" v{}({})", id, round).as_str());
+                        }
                     }
                 }
 
+                let is_delivered_char = if self.delivered_vertices.contains(hash) { "*" } else { "" };
                 if parents_line.is_empty() {
-                    line.push_str(format!("(V{})", c).as_str());
+                    line.push_str(format!("| V{}({}) |", c, vertex.short_encoded_owner()).as_str());
                 } else {
-                    line.push_str(format!("(V{})[{} ]", c, parents_line).as_str());
+                    line.push_str(format!("| V{}{}({})[{} ] |",
+                                          c, is_delivered_char, vertex.short_encoded_owner(), parents_line).as_str());
                 }
                 if c < vertices.len() {
                     line.push_str(" --- ");

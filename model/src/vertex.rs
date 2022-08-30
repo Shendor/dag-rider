@@ -48,11 +48,15 @@ impl Vertex {
     }
 
     pub fn genesis(nodes: Vec<NodePublicKey>) -> Vec<Self> {
-        nodes.iter().map(|owner| Vertex::new(*owner, 1, vec![], BTreeMap::new())).collect()
+        nodes.iter().map(|owner| Vertex::new(*owner, 0, vec![], BTreeMap::new())).collect()
     }
 
     pub fn add_parent(&mut self, parent_vertex_hash: VertexHash, round: Round, parent_vertex_time: Timestamp) {
         self.parents.insert(parent_vertex_hash, (round, parent_vertex_time));
+    }
+
+    pub fn set_timestamp(&mut self, timestamp: Timestamp) {
+        self.timestamp = timestamp;
     }
 
     pub fn get_strong_parents(&self) -> BTreeMap<VertexHash, (Round, Timestamp)> {
@@ -88,6 +92,12 @@ impl Vertex {
 
     pub fn encoded_owner(&self) -> String {
         base64::encode(self.owner())
+    }
+
+    pub fn short_encoded_owner(&self) -> String {
+        let encoded_owner = self.encoded_owner();
+        let short_encoded_owner = encoded_owner.as_str();
+        String::from(&short_encoded_owner[..5])
     }
 
     pub fn hash(&self) -> VertexHash {

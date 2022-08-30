@@ -14,7 +14,7 @@ use network::{CancelHandler, ReliableSender};
 use crate::vertex_message_handler::VertexMessage;
 
 /// The maximum delay to wait for blocks.
-const MAX_VERTEX_DELAY: u64 = 1000;
+const MAX_VERTEX_DELAY: u64 = 5000;
 
 /// The proposer creates new vertices and send them to the VertexAggregator for further processing.
 pub struct Proposer {

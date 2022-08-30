@@ -32,7 +32,7 @@ impl MessageHandler for VertexReceiverHandler {
                 debug!("Received a VertexRequest message from the synchronizer");
                 //TODO: Sync vertex
             },
-            VertexMessage::NewVertex(vertex) => {
+            VertexMessage::NewVertex(mut vertex) => {
                 debug!("Received a broadcast NewVertex message. Re-routing the vertex to Vertex Aggregator");
                 self.vertex_sender
                     .send(vertex)

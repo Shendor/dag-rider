@@ -1,73 +1,71 @@
 use std::collections::{BTreeSet, HashMap};
-use log::info;
+use log::{debug, info, warn};
 use tokio::sync::broadcast::Sender;
 use tokio::sync::mpsc::{Receiver};
 use model::{Round, Timestamp};
 use model::vertex::Vertex;
 
 /// Everything older than 3 sec must be cleaned up.
-const GC_DELTA_TIME: u128 = 3 * 1000;
+const GC_DELTA_TIME: Timestamp = 30000;
 
 /// Receives the highest round reached by consensus and update it for all tasks.
 pub struct GarbageCollector {
-    /// Receives the leader and timings of ordered vertices for this leader.
-    /// The timings are grouped by rounds so GC can calculate median time per round.
-    ordered_vertex_timestamps_receiver: Receiver<(Vertex, Vec<(Round, Timestamp)>)>,
     /// A broadcast sender which notifies all participants about a garbage collected round.
-    gc_round_sender: Sender<Round>,
+    gc_round_notifier: Sender<Round>,
+    /// The latest round which was collected.
     gc_round: Round,
 }
 
 impl GarbageCollector {
-    pub fn spawn(
-        ordered_vertex_timestamps_receiver: Receiver<(Vertex, Vec<(Round, Timestamp)>)>,
-        gc_round_sender: Sender<Round>
-    ) {
-        tokio::spawn(async move {
-            Self {
-                gc_round: 0,
-                ordered_vertex_timestamps_receiver,
-                gc_round_sender
-            }.run().await;
-        });
-    }
-
-    async fn run(&mut self) {
-        while let Some((leader, ordered_vertex_timestamps)) = self.ordered_vertex_timestamps_receiver.recv().await {
-
-            let leader_ts = Self::median_timestamp(&leader.parents().iter().map(|(_, (_, timestamp))| *timestamp).collect::<BTreeSet<Timestamp>>());
-
-            let round = leader.round();
-            if round > self.gc_round {
-                let mut r = self.gc_round + 1;
-
-                let timestamps_per_round = Self::group_timestamps_by_round(ordered_vertex_timestamps);
-
-                while r < round - 1 {
-                    let round_ts = match timestamps_per_round.get(&r) {
-                        Some(timestamps) => Self::median_timestamp(timestamps),
-                        None => leader_ts
-                    };
-
-                    if leader_ts - round_ts > GC_DELTA_TIME {
-                        self.gc_round = r;
-                        self.notify_gc_round();
-                    }
-                    r += 1;
-                }
-            }
+    pub fn new(gc_round_notifier: Sender<Round>) -> Self {
+        Self {
+            gc_round: 0,
+            gc_round_notifier,
         }
     }
 
-    fn group_timestamps_by_round(ordered_vertex_timestamps: Vec<(Round, Timestamp)>) -> HashMap<Round, BTreeSet<Timestamp>> {
-        let mut timestamps_per_round: HashMap<Round, BTreeSet<Timestamp>> = HashMap::new();
-        ordered_vertex_timestamps.into_iter().for_each(|(r, t)| {
-            timestamps_per_round.entry(r).or_insert(BTreeSet::new()).insert(t);
-        });
-        timestamps_per_round
+    pub fn run(&mut self, leader: &Vertex, timestamps_per_round: HashMap<Round, BTreeSet<Timestamp>>) -> Option<Round> {
+        // Consensus sends a leader vertex and timestamps of its ordered vertices per round,
+        // when it triggers ordering of vertices.
+        let parents_timestamp = leader.parents().iter().map(|(_, (_, timestamp))| *timestamp).collect::<BTreeSet<Timestamp>>();
+        let leader_ts = Self::median_timestamp(&parents_timestamp);
+
+        let last_gc_round = self.gc_round;
+        let round = leader.round();
+        // If the leader's round is higher then recently gc round,
+        // then check the previous rounds from it if they can be GC.
+        if round > self.gc_round {
+            let mut r = self.gc_round + 1;
+
+            // Go in loop, starting from the last GC round, until the leader's parents round
+            // and compare their median timestamps (created time).
+            while r < round - 1 {
+                let round_ts = match timestamps_per_round.get(&r) {
+                    Some(timestamps) => Self::median_timestamp(timestamps),
+                    None => leader_ts
+                };
+
+                if leader_ts - round_ts > GC_DELTA_TIME {
+                    self.gc_round = r;
+                }
+                r += 1;
+            }
+        }
+
+        if last_gc_round != self.gc_round {
+            self.notify_gc_round(last_gc_round, leader.encoded_owner());
+            return Some(self.gc_round)
+        }
+        return None
     }
 
-    fn median_timestamp(timestamps: &BTreeSet<u128>) -> u128 {
+    fn notify_gc_round(&self, last_gc_round: Round, leader_hash: String) {
+        info!("GC notifies about the collected rounds from {} to {} for the leader '{}'",
+            last_gc_round, self.gc_round, leader_hash);
+        self.gc_round_notifier.send(self.gc_round);
+    }
+
+    fn median_timestamp(timestamps: &BTreeSet<Timestamp>) -> Timestamp {
         let mut result = 0;
         let size = timestamps.len();
         let mut iter = timestamps.iter();
@@ -75,10 +73,5 @@ impl GarbageCollector {
             result = *iter.next().unwrap()
         }
         result
-    }
-
-    fn notify_gc_round(&mut self) {
-        info!("Round {} has been cleaned up", self.gc_round);
-        self.gc_round_sender.send(self.gc_round);
     }
 }
