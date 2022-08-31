@@ -1,9 +1,7 @@
-use std::collections::{BTreeSet, HashMap};
-use log::{debug, error, info, warn};
-use tokio::count;
-use tokio::sync::mpsc::{Receiver, Sender};
+use log::{debug, info, warn};
+use tokio::sync::mpsc::Receiver;
 use model::committee::Committee;
-use model::{Round, Timestamp};
+use model::Round;
 use model::vertex::Vertex;
 use crate::garbage_collector::GarbageCollector;
 use crate::state::State;
@@ -16,9 +14,6 @@ pub struct Consensus {
 
     /// Receives new vertices from the `VertexAggregator`.
     vertex_receiver: Receiver<Vertex>,
-
-    // ordered_vertex_timestamps_sender: Sender<(Vertex, HashMap<Round, BTreeSet<Timestamp>>)>,
-    // gc_message_receiver: tokio::sync::broadcast::Receiver<Round>,
 }
 
 const WAVE: u64 = 2;
@@ -28,16 +23,12 @@ impl Consensus {
         committee: Committee,
         vertex_receiver: Receiver<Vertex>,
         gc_service: GarbageCollector
-        // ordered_vertex_timestamps_sender: Sender<(Vertex, HashMap<Round, BTreeSet<Timestamp>>)>,
-        // gc_message_receiver: tokio::sync::broadcast::Receiver<Round>,
     ) {
         tokio::spawn(async move {
             Self {
                 committee: committee.clone(),
                 vertex_receiver,
-                // ordered_vertex_timestamps_sender,
                 state: State::new(Vertex::genesis(committee.get_nodes_keys())),
-                // gc_message_receiver,
                 gc_service
             }.run().await;
         });
@@ -65,7 +56,7 @@ impl Consensus {
                 debug!("Start to elect leader for round {}", leader_round);
                 let leader = match self.leader(leader_round) {
                     Some(x) => {
-                        debug!("Found a leader {} for the round {}", x.encoded_owner(), leader_round);
+                        info!("Found a leader {} for the round {}", x.encoded_owner(), leader_round);
                         x
                     }
                     None => {
@@ -92,9 +83,8 @@ impl Consensus {
                     //TODO: maybe trigger it once for the last leader?
                     self.notify_gc(&l).await;
                 }
-                debug!("Vertices has been ordered from round {}. Current DAG:\n {}\n\
+                info!("Vertices has been ordered from round {}. Current DAG:\n {}\n\
                 Last ordered round is {}", round, self.state, self.state.last_committed_round);
-
             }
         }
     }

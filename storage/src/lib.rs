@@ -42,20 +42,20 @@ impl Storage {
                     }
                     StoreCommand::Read(key, sender) => {
                         match db.get(&key) {
-                            None =>  sender.send(StoreResult::Ok(None)),
-                            Some(response) => sender.send(StoreResult::Ok(Some(response.clone())))
+                            Some(response) => sender.send(StoreResult::Ok(Some(response.clone()))),
+                            None => sender.send(StoreResult::Ok(None))
                         };
                     }
                     StoreCommand::NotifyRead(key, sender) => {
                         let response = db.get(&key);
                         match response {
+                            Some(response) => {
+                                let _ = sender.send(Ok(response.clone()));
+                            },
                             None => obligations
                                 .entry(key)
                                 .or_insert_with(VecDeque::new)
-                                .push_back(sender),
-                            Some(response) => {
-                                let _ = sender.send(Ok(response.clone()));
-                            }
+                                .push_back(sender)
                         }
                     }
                 }

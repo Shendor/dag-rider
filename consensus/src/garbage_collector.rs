@@ -1,7 +1,6 @@
 use std::collections::{BTreeSet, HashMap};
-use log::{debug, info, warn};
+use log::info;
 use tokio::sync::broadcast::Sender;
-use tokio::sync::mpsc::{Receiver};
 use model::{Round, Timestamp};
 use model::vertex::Vertex;
 
@@ -62,7 +61,7 @@ impl GarbageCollector {
     fn notify_gc_round(&self, last_gc_round: Round, leader_hash: String) {
         info!("GC notifies about the collected rounds from {} to {} for the leader '{}'",
             last_gc_round, self.gc_round, leader_hash);
-        self.gc_round_notifier.send(self.gc_round);
+        let _ = self.gc_round_notifier.send(self.gc_round);
     }
 
     fn median_timestamp(timestamps: &BTreeSet<Timestamp>) -> Timestamp {

@@ -6,7 +6,7 @@ use log::{info, warn};
 use rand::prelude::SliceRandom as _;
 use rand::rngs::SmallRng;
 use rand::SeedableRng as _;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -14,9 +14,10 @@ use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 /// We keep alive one TCP connection per peer, each connection is handled by a separate task (called `Connection`).
 /// We communicate with our 'connections' through a dedicated channel kept by the HashMap called `connections`.
+#[derive(Clone)]
 pub struct SimpleSender {
     /// A map holding the channels to our connections.
-    connections: HashMap<SocketAddr, Sender<Bytes>>,
+    connections: BTreeMap<SocketAddr, Sender<Bytes>>,
     /// Small RNG just used to shuffle nodes and randomize connections (not crypto related).
     rng: SmallRng,
 }
@@ -30,7 +31,7 @@ impl std::default::Default for SimpleSender {
 impl SimpleSender {
     pub fn new() -> Self {
         Self {
-            connections: HashMap::new(),
+            connections: BTreeMap::new(),
             rng: SmallRng::from_entropy(),
         }
     }

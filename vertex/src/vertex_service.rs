@@ -1,4 +1,4 @@
-use log::{debug, info};
+use log::info;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 use model::committee::{Committee, NodePublicKey};
@@ -10,8 +10,8 @@ use storage::Storage;
 use crate::proposer::Proposer;
 use crate::vertex_aggregator::VertexAggregator;
 
-use crate::vertex_message_handler::{VertexMessage, VertexReceiverHandler};
-use crate::vertex_synchronizer::SyncMessage;
+use crate::vertex_message_handler::VertexReceiverHandler;
+use crate::vertex_synchronizer::{SyncMessage, VertexSynchronizer};
 
 pub struct VertexService;
 
@@ -35,21 +35,20 @@ impl VertexService {
             .expect("Node address was not found in the committee for the provided public key");
         NetworkReceiver::spawn(
             address,
-            VertexReceiverHandler { vertex_sender },
+            VertexReceiverHandler::new(vertex_sender, committee.clone(), storage.clone())
         );
         info!("VertexReceiverHandler is listening to the messages on {}", address);
 
         VertexAggregator::spawn(
             node_key,
             committee.clone(),
-            storage,
+            storage.clone(),
             vertex_receiver,
             parents_sender,
             proposed_vertex_receiver,
             consensus_sender,
             sync_message_sender,
-            vertex_sync_receiver,
-            gc_message_receiver
+            vertex_sync_receiver
         );
 
         Proposer::spawn(
@@ -59,15 +58,15 @@ impl VertexService {
             proposed_vertex_sender,
             block_receiver,
             ReliableSender::new()
-        )
+        );
 
-        /*VertexSynchronizer::spawn(
+        VertexSynchronizer::spawn(
             node_key,
             committee.clone(),
             storage,
             sync_message_receiver,
             gc_message_receiver,
             vertex_sync_sender
-        );*/
+        );
     }
 }

@@ -1,7 +1,7 @@
 use log::{debug};
 use tokio::sync::mpsc::{channel, Sender};
 
-use model::block::{Block, BlockHash};
+use model::block::BlockHash;
 use model::committee::{Committee, Id};
 use model::DEFAULT_CHANNEL_CAPACITY;
 use network::Receiver;

@@ -1,20 +1,19 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 use anyhow::{Context, Result};
 use clap::{App, ArgMatches, SubCommand};
 use env_logger::Env;
 use log::info;
-use tokio::sync::mpsc::{channel, Receiver};
+use tokio::sync::mpsc::channel;
 use consensus::consensus::Consensus;
 use consensus::garbage_collector::GarbageCollector;
 
-use model::block::{Block, BlockHash};
+use model::block::BlockHash;
 use model::committee::{Committee, Id};
-use model::{Round, Timestamp};
+use model::Round;
 use model::vertex::Vertex;
 use storage::Storage;
 use transaction::TransactionService;
 use vertex::vertex_service::VertexService;
-use vertex::vertex_message_handler::VertexMessage;
 
 pub const DEFAULT_CHANNEL_CAPACITY: usize = 1000;
 

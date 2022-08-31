@@ -18,7 +18,7 @@ pub trait MessageHandler: Clone + Send + Sync + 'static {
     /// number of `Sender<T>` channels. Then implement `dispatch` to deserialize incoming messages and
     /// forward them through the appropriate delivery channel. Then `writer` can be used to send back
     /// responses or acknowledgements to the sender machine (see unit tests for examples).
-    async fn dispatch(&self, writer: &mut Writer, message: Bytes) -> Result<(), Box<dyn Error>>;
+    async fn dispatch(&mut self, writer: &mut Writer, message: Bytes) -> Result<(), Box<dyn Error>>;
 }
 
 /// For each incoming request, we spawn a new runner responsible to receive messages and forward them
@@ -39,7 +39,7 @@ impl<Handler: MessageHandler> Receiver<Handler> {
     }
 
     /// Main loop responsible to accept incoming connections and spawn a new runner to handle it.
-    async fn run(&self) {
+    async fn run(&mut self) {
         let listener = TcpListener::bind(&self.address)
             .await
             .expect("Failed to bind TCP port");
@@ -60,7 +60,7 @@ impl<Handler: MessageHandler> Receiver<Handler> {
 
     /// Spawn a new runner to handle a specific TCP connection. It receives messages and process them
     /// using the provided handler.
-    async fn spawn_runner(socket: TcpStream, peer: SocketAddr, handler: Handler) {
+    async fn spawn_runner(socket: TcpStream, peer: SocketAddr, mut handler: Handler) {
         tokio::spawn(async move {
             let transport = Framed::new(socket, LengthDelimitedCodec::new());
             let (mut writer, mut reader) = transport.split();

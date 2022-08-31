@@ -23,7 +23,7 @@ pub struct ReceiveTxHandler {
 
 #[async_trait]
 impl MessageHandler for ReceiveTxHandler {
-    async fn dispatch(&self, _writer: &mut Writer, message: Bytes) -> Result<(), Box<dyn Error>> {
+    async fn dispatch(&mut self, _writer: &mut Writer, message: Bytes) -> Result<(), Box<dyn Error>> {
         info!("TxReceiverHandler received transaction to process {:?}", message);
         // Send the transaction to the block builder.
         self.transaction_sender
@@ -45,7 +45,7 @@ pub struct ReceiveBlockHandler {
 
 #[async_trait]
 impl MessageHandler for ReceiveBlockHandler {
-    async fn dispatch(&self, writer: &mut Writer, serialized: Bytes) -> Result<(), Box<dyn Error>> {
+    async fn dispatch(&mut self, writer: &mut Writer, serialized: Bytes) -> Result<(), Box<dyn Error>> {
         let _ = writer.send(Bytes::from("Ack")).await;
 
         match bincode::deserialize(&serialized) {

@@ -26,10 +26,6 @@ impl Vertex {
                blocks: Vec<BlockHash>,
                parents: BTreeMap<VertexHash, (Round, Timestamp)>,
     ) -> Self {
-        let now = SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("Failed to measure time")
-            .as_millis();
         let vertex = Self {
             owner,
             round,
@@ -42,7 +38,6 @@ impl Vertex {
         let hash = blake3::hash(&encoded).as_bytes().clone();
         Self {
             hash,
-            timestamp: now,
             ..vertex
         }
     }
@@ -55,8 +50,11 @@ impl Vertex {
         self.parents.insert(parent_vertex_hash, (round, parent_vertex_time));
     }
 
-    pub fn set_timestamp(&mut self, timestamp: Timestamp) {
-        self.timestamp = timestamp;
+    pub fn reset_to_current_time(&mut self) {
+        self.timestamp = SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("Failed to get current time")
+            .as_millis();
     }
 
     pub fn get_strong_parents(&self) -> BTreeMap<VertexHash, (Round, Timestamp)> {

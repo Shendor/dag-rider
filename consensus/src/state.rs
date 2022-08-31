@@ -1,9 +1,6 @@
-use std::borrow::Borrow;
 use std::cmp::max;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::{Display, Formatter};
-use std::str::Chars;
-use log::debug;
 use model::committee::NodePublicKey;
 
 use model::{Round, Timestamp};
