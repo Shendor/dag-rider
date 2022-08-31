@@ -1,4 +1,6 @@
 use std::net::SocketAddr;
+use std::thread::sleep;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use bytes::BufMut as _;
@@ -44,7 +46,7 @@ struct Client {
 
 impl Client {
     pub async fn send(&self) -> Result<()> {
-        const TRANSACTION_COUNT: u64 = 40;
+        const TRANSACTION_COUNT: u64 = 200;
         const TX_SIZE: usize = 64;
 
         let stream = TcpStream::connect(self.target)
@@ -65,6 +67,7 @@ impl Client {
             let bytes = tx.split().freeze();
 
             transport.send(bytes).await?;
+            sleep(Duration::from_millis(100));
         }
 
         Ok(())

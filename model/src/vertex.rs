@@ -50,6 +50,10 @@ impl Vertex {
         self.parents.insert(parent_vertex_hash, (round, parent_vertex_time));
     }
 
+    pub fn get_blocks(&self) -> &Vec<BlockHash> {
+        &self.blocks
+    }
+
     pub fn reset_to_current_time(&mut self) {
         self.timestamp = SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

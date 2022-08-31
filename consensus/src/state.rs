@@ -140,11 +140,13 @@ impl Display for State {
                 }
 
                 let is_delivered_char = if self.delivered_vertices.contains(hash) { "*" } else { "" };
+                let blocks_count_char =
+                    if vertex.get_blocks().len() > 0 { format!("b={}", vertex.get_blocks().len()) } else { String::new() };
                 if parents_line.is_empty() {
                     line.push_str(format!("| V{}({}) |", c, vertex.short_encoded_owner()).as_str());
                 } else {
-                    line.push_str(format!("| V{}{}({})[{} ] |",
-                                          c, is_delivered_char, vertex.short_encoded_owner(), parents_line).as_str());
+                    line.push_str(format!("| V{}{}({})[{} ] {} |",
+                                          c, is_delivered_char, vertex.short_encoded_owner(), parents_line, blocks_count_char).as_str());
                 }
                 if c < vertices.len() {
                     line.push_str(" --- ");

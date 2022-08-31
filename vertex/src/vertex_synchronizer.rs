@@ -50,7 +50,7 @@ pub struct VertexSynchronizer {
     parent_requests: HashMap<VertexHash, (Round, Timestamp)>,
     /// Store pending requests for the vertex.
     pending: HashMap<VertexHash, (Round, Sender<()>)>,
-    gc_message_receiver: tokio::sync::broadcast::Receiver<Round>
+    gc_message_receiver: tokio::sync::broadcast::Receiver<Round>,
 }
 
 impl VertexSynchronizer {
@@ -123,11 +123,11 @@ impl VertexSynchronizer {
                             let mut vertices_to_sync = Vec::new();
                             for parent in missing_parents {
                                 self.parent_requests
-                                .entry(parent.clone())
-                                .or_insert_with(|| {
-                                    vertices_to_sync.push(parent);
-                                    (round, now)
-                                });
+                                    .entry(parent.clone())
+                                    .or_insert_with(|| {
+                                        vertices_to_sync.push(parent);
+                                        (round, now)
+                                    });
                             }
                             if !vertices_to_sync.is_empty() {
                                 let address = self.committee
@@ -165,7 +165,7 @@ impl VertexSynchronizer {
                     // broadcast the request to all nodes.
                     let now = SystemTime::now()
                         .duration_since(UNIX_EPOCH)
-                        .expect("Failed to measure time")
+                        .expect("Failed to get current time")
                         .as_millis();
 
                     let mut vertices_to_retry = Vec::new();
@@ -176,10 +176,12 @@ impl VertexSynchronizer {
                         }
                     }
 
-                    let addresses = self.committee.get_node_addresses_but_me(&self.node_key);
-                    let message = VertexMessage::VertexRequest(vertices_to_retry, self.node_key);
-                    let bytes = bincode::serialize(&message).expect("Failed to serialize VertexRequest");
-                    self.network.lucky_broadcast(addresses, Bytes::from(bytes), SYNC_RETRY_NODES).await;
+                    if !vertices_to_retry.is_empty() {
+                        let addresses = self.committee.get_node_addresses_but_me(&self.node_key);
+                        let message = VertexMessage::VertexRequest(vertices_to_retry, self.node_key);
+                        let bytes = bincode::serialize(&message).expect("Failed to serialize VertexRequest");
+                        self.network.lucky_broadcast(addresses, Bytes::from(bytes), SYNC_RETRY_NODES).await;
+                    }
 
                     // Reschedule the timer.
                     timer.as_mut().reset(Instant::now() + Duration::from_millis(TIMER_RESOLUTION));

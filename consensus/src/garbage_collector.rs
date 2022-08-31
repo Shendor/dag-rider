@@ -44,7 +44,7 @@ impl GarbageCollector {
                     None => leader_ts
                 };
 
-                if leader_ts - round_ts > GC_DELTA_TIME {
+                if leader_ts > round_ts && leader_ts - round_ts > GC_DELTA_TIME {
                     self.gc_round = r;
                 }
                 r += 1;

@@ -47,7 +47,7 @@ impl MessageHandler for VertexReceiverHandler {
 
         match bincode::deserialize(&serialized).map_err(model::Error::SerializationError)? {
             VertexMessage::VertexRequest(vertices_to_sync, from) => {
-                debug!("Received a VertexRequest message from the synchronizer");
+                debug!("Received a VertexRequest message from the synchronizer to sync {} vertices", vertices_to_sync.len());
                 if let Some(address) = self.committee.get_node_address_by_key(&from) {
                     for vertex_hash in vertices_to_sync {
                         match self.storage.read(vertex_hash.to_vec()).await? {
