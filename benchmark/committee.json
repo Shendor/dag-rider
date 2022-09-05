@@ -1,0 +1,28 @@
+{
+    "validators": {
+        "1": {
+            "address": "0.0.0.0:3011",
+            "block_address": "0.0.0.0:3031",
+            "keypair": "ad7f2ee3958a7f3fa2c84931770f5773ef7694fdd0bb217d90f29a94199c9d7307ca3851515c89344639fe6a4077923068d1d7fc6106701213c61d34ef8e9416",
+            "tx_address": "0.0.0.0:3021"
+        },
+        "2": {
+            "address": "0.0.0.0:3012",
+            "block_address": "0.0.0.0:3032",
+            "keypair": "5a353c630d3faf8e2d333a0983c1c71d5e9b6aed8f4959578fbeb3d3f3172886393b576de0ac1fe86a4dd416cf032543ac1bd066eb82585f779f6ce21237c0cd",
+            "tx_address": "0.0.0.0:3022"
+        },
+        "3": {
+            "address": "0.0.0.0:3013",
+            "block_address": "0.0.0.0:3033",
+            "keypair": "6f4b736b9a6894858a81696d9c96cbdacf3d49099d212213f5abce33da18716f067f8a2b9aeb602cd4163291ebbf39e0e024634f3be19bde4c490465d9095a6b",
+            "tx_address": "0.0.0.0:3023"
+        },
+        "4": {
+            "address": "0.0.0.0:3014",
+            "block_address": "0.0.0.0:3034",
+            "keypair": "3ae38eec96146c241f6cadf01995af14f027b23b8fecbc77dbc2e3ed5fec6fc3fb4fe5534f7affc9a8f1d99e290fdb91cc26777edd6fae480cad9f735d1b3680",
+            "tx_address": "0.0.0.0:3024"
+        }
+    }
+}

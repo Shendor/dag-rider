@@ -1,6 +1,6 @@
 use std::time::Duration;
 use bytes::Bytes;
-use log::{info};
+use log::{info, debug};
 use tokio::sync::mpsc::{Receiver};
 use tokio::time::{Instant, sleep};
 
@@ -9,7 +9,7 @@ use model::committee::Committee;
 use network::ReliableSender;
 use crate::handler::BlockMessage;
 
-const TX_SIZE: usize = 10;
+const TX_SIZE: usize = 1000;
 const MAX_TX_COUNT_WAIT: u64 = 5000;
 
 pub struct BlockBuilder {
@@ -43,7 +43,7 @@ impl BlockBuilder {
         loop {
             tokio::select! {
                 Some(transaction) = self.transaction_receiver.recv() => {
-                     info!("BlockBuilder received transaction {:?}", transaction);
+                    debug!("BlockBuilder received transaction");
                     self.current_transactions.push(transaction);
 
                     if self.current_transactions.len() >= TX_SIZE {
@@ -67,7 +67,33 @@ impl BlockBuilder {
     }
 
     async fn build_block(&mut self) {
-        let message = BlockMessage::Block(Block::new(self.current_transactions.drain(..).collect()));
+        #[cfg(feature = "benchmark")]
+            let size = self.current_transactions.len();
+        #[cfg(feature = "benchmark")]
+        let tx_ids: Vec<_> = self
+            .current_transactions
+            .iter()
+            .filter(|tx| tx[0] == 0u8 && tx.len() > 8)
+            .filter_map(|tx| tx[1..9].try_into().ok())
+            .collect();
+
+        let block = Block::new(self.current_transactions.drain(..).collect());
+
+        #[cfg(feature = "benchmark")]
+        {
+            let block_hash = block.encoded_hash();
+            for id in tx_ids {
+                info!(
+                    "Block {} contains sample tx {}",
+                    block_hash,
+                    u64::from_be_bytes(id)
+                );
+            }
+
+            info!("Block {} contains {} transactions", block_hash, size);
+        }
+
+        let message = BlockMessage::Block(block);
         let serialized = bincode::serialize(&message).expect("Failed to serialize the block");
 
         // Broadcast the block through the network.

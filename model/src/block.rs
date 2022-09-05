@@ -22,4 +22,8 @@ impl Block {
     pub fn hash(&self) -> BlockHash {
         self.hash
     }
+
+    pub fn encoded_hash(&self) -> String {
+        base64::encode(self.hash())
+    }
 }

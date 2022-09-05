@@ -23,6 +23,10 @@ vertex = { path = "../vertex" }
 transaction = { path = "../transaction" }
 storage = { path = "../storage" }
 
+[features]
+benchmark = ["transaction/benchmark", "vertex/benchmark", "consensus/benchmark"]
+
 [[bin]]
-name = "client"
-path = "src/client.rs"
+name = "benchmark_client"
+path = "src/benchmark_client.rs"
+required-features = ["benchmark"]

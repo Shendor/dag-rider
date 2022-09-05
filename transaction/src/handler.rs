@@ -3,7 +3,7 @@ use tokio::sync::mpsc::{Sender};
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::sink::SinkExt as _;
-use log::{info, warn};
+use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use network::{MessageHandler, Writer};
@@ -24,7 +24,7 @@ pub struct ReceiveTxHandler {
 #[async_trait]
 impl MessageHandler for ReceiveTxHandler {
     async fn dispatch(&mut self, _writer: &mut Writer, message: Bytes) -> Result<(), Box<dyn Error>> {
-        info!("TxReceiverHandler received transaction to process {:?}", message);
+        debug!("Node has received a transaction to process");
         // Send the transaction to the block builder.
         self.transaction_sender
             .send(message.to_vec())

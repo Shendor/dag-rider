@@ -26,6 +26,7 @@ async fn main() -> Result<()> {
             SubCommand::with_name("run")
                 .about("Run a node")
                 .args_from_usage("--id=<INT> 'Node id'")
+                .args_from_usage("--committee=<FILE> 'The file containing committee information'")
         )
         .get_matches();
 
@@ -41,12 +42,14 @@ async fn main() -> Result<()> {
 
 async fn run(matches: &ArgMatches<'_>) -> Result<()> {
     let node_id = matches.value_of("id").unwrap().parse::<Id>().unwrap();
+    let committee_file = matches.value_of("committee").unwrap();
 
     let (consensus_sender, consensus_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
     let (gc_round_sender, gc_round_receiver) = tokio::sync::broadcast::channel::<Round>(DEFAULT_CHANNEL_CAPACITY);
     let (block_sender, block_receiver) = channel::<BlockHash>(DEFAULT_CHANNEL_CAPACITY);
 
-    let committee = Committee::default();
+    let committee = Committee::from_file(committee_file);
+
     let genesis = Vertex::genesis(committee.get_nodes_keys()).iter()
         .map(|v| (v.hash().to_vec(), bincode::serialize(v).expect("Failed to serialize vertex")))
         .collect::<HashMap<Vec<u8>, Vec<u8>>>();

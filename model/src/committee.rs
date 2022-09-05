@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
+use std::fs;
 use std::net::SocketAddr;
 use ed25519_dalek::Keypair;
-use serde::{Deserialize};
+use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
 
 pub type Id = u32;
 pub type NodePublicKey = [u8; 32];
@@ -15,13 +17,13 @@ pub struct Validator {
 }
 
 impl Validator {
-    pub fn new(keypair: &str, port: u16, tx_port: u16, block_port: u16) -> Self {
+    pub fn new(keypair: &str, addr: &str, tx_addr: &str, block_addr: &str) -> Self {
         let keypair = Validator::create_keypair(String::from(keypair));
         let public_key = Validator::create_node_public_key_from(&keypair);
         Self {
-            address: SocketAddr::new("0.0.0.0".parse().unwrap(), port),
-            tx_address: SocketAddr::new("0.0.0.0".parse().unwrap(), tx_port),
-            block_address: SocketAddr::new("0.0.0.0".parse().unwrap(), block_port),
+            address: addr.parse().unwrap(),
+            tx_address: tx_addr.parse().unwrap(),
+            block_address: block_addr.parse().unwrap(),
             public_key,
         }
     }
@@ -43,22 +45,25 @@ pub struct Committee {
 }
 
 impl Committee {
-    pub fn default() -> Self {
-        let mut validators = BTreeMap::new();
-        validators.insert(1, Validator::new(
-            "ad7f2ee3958a7f3fa2c84931770f5773ef7694fdd0bb217d90f29a94199c9d7307ca3851515c89344639fe6a4077923068d1d7fc6106701213c61d34ef8e9416",
-            1234, 1244, 1254));
-        validators.insert(2, Validator::new(
-            "5a353c630d3faf8e2d333a0983c1c71d5e9b6aed8f4959578fbeb3d3f3172886393b576de0ac1fe86a4dd416cf032543ac1bd066eb82585f779f6ce21237c0cd",
-            1235, 1245, 1255));
-        validators.insert(3, Validator::new(
-            "6f4b736b9a6894858a81696d9c96cbdacf3d49099d212213f5abce33da18716f067f8a2b9aeb602cd4163291ebbf39e0e024634f3be19bde4c490465d9095a6b",
-            1236, 1246, 1256));
-        validators.insert(4, Validator::new(
-            "3ae38eec96146c241f6cadf01995af14f027b23b8fecbc77dbc2e3ed5fec6fc3fb4fe5534f7affc9a8f1d99e290fdb91cc26777edd6fae480cad9f735d1b3680",
-            1237, 1247, 1257));
 
-        Self {
+    pub fn from_file(path: &str) -> Self {
+        let data = fs::read(path).expect("Failed to open committee file");
+        let json: serde_json::Value =
+            serde_json::from_slice(data.as_slice()).expect("Failed to parse committee file");
+
+        let mut validators = BTreeMap::new();
+
+        for (key, value) in json["validators"].as_object().unwrap() {
+            validators.insert(key.parse::<Id>().unwrap(),
+                              Validator::new(
+                                  value.get("keypair").unwrap().as_str().unwrap(),
+                                  value.get("address").unwrap().as_str().unwrap(),
+                                  value.get("tx_address").unwrap().as_str().unwrap(),
+                                  value.get("block_address").unwrap().as_str().unwrap(),
+                              ));
+        }
+
+        Committee {
             validators
         }
     }
@@ -68,14 +73,16 @@ impl Committee {
     }
 
     pub fn quorum_threshold(&self) -> usize {
-        self.size() - 1
+        // self.size() - 1
+        self.size()
     }
 
     /// Returns the stake required to reach availability (f+1).
     pub fn validity_threshold(&self) -> usize {
         // If N = 3f + 1 + k (0 <= k < 3)
         // then (N + 2) / 3 = f + 1 + k/3 = f + 1
-        ((self.validators.len() + 2) / 3) as usize
+        // ((self.size() + 2) / 3) as usize
+        self.size()
     }
 
     pub fn get_node_address(&self, id: Id) -> Option<SocketAddr> {

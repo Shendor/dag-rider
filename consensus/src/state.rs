@@ -1,6 +1,7 @@
 use std::cmp::max;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::{Display, Formatter};
+use log::debug;
 use model::committee::NodePublicKey;
 
 use model::{Round, Timestamp};
@@ -42,6 +43,13 @@ impl State {
         {
             self.delivered_vertices.insert(vertex.hash());
             self.last_committed_round = max(self.last_committed_round, vertex.round());
+
+            #[cfg(feature = "benchmark")]
+            for block_hash in vertex.get_blocks() {
+                // NOTE: This log entry is used to compute performance.
+                debug!("Committed: {}", base64::encode(block_hash));
+            }
+
             return Some(vertex.clone());
         }
         return None;

@@ -20,7 +20,7 @@ use crate::vertex_message_handler::VertexMessage;
 /// new sync requests if we didn't.
 const TIMER_RESOLUTION: u64 = 1_000;
 /// The delay to wait before re-trying sync requests.
-const SYNC_RETRY_DELAY: u128 = 1_000;
+const SYNC_RETRY_DELAY: u128 = 1_0000;
 /// Determine with how many nodes to sync when re-trying to send sync-request.
 const SYNC_RETRY_NODES: usize = 3;
 

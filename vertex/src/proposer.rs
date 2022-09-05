@@ -155,6 +155,11 @@ impl Proposer {
         );
 
         info!("New vertex created: {}", vertex.encoded_hash());
+        #[cfg(feature = "benchmark")]
+        for block_hash in vertex.get_blocks() {
+            // NOTE: This log entry is used to compute performance.
+            debug!("New block proposed: {}", base64::encode(block_hash));
+        }
 
         let addresses = self.committee.get_node_addresses();
         let bytes = bincode::serialize(&VertexMessage::NewVertex(vertex))
