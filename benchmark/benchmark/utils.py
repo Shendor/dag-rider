@@ -33,11 +33,9 @@ class PathMaker:
         return f'.node-{i}.json'
 
     @staticmethod
-    def db_path(i, j=None):
+    def db_path(i):
         assert isinstance(i, int) and i >= 0
-        assert (isinstance(j, int) and i >= 0) or j is None
-        worker_id = f'-{j}' if j is not None else ''
-        return f'.db-{i}{worker_id}'
+        return f'db-{i}'
 
     @staticmethod
     def logs_path():
@@ -47,6 +45,11 @@ class PathMaker:
     def node_log_file(i):
         assert isinstance(i, int) and i >= 0
         return join(PathMaker.logs_path(), f'node-{i}.log')
+
+    @staticmethod
+    def block_log_file(i):
+        assert isinstance(i, int) and i >= 0
+        return join(PathMaker.logs_path(), f'block-{i}.log')
 
     @staticmethod
     def tx_receiver_log_file(i, j):

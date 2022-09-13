@@ -5,3 +5,4 @@ mod proposer;
 mod vertex_aggregator;
 mod vertex_synchronizer;
 pub mod error;
+mod block_handler;

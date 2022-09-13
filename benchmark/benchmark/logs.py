@@ -13,8 +13,8 @@ class ParseError(Exception):
 
 
 class LogParser:
-    def __init__(self, clients, nodes, faults=0):
-        inputs = [clients, nodes]
+    def __init__(self, clients, nodes, blocks, faults=0):
+        inputs = [clients, nodes, blocks]
         assert all(isinstance(x, list) for x in inputs)
         assert all(isinstance(x, str) for y in inputs for x in y)
         assert all(x for x in inputs)
@@ -49,7 +49,7 @@ class LogParser:
 
         try:
             with Pool() as p:
-                results = p.map(self._parse_workers, nodes)
+                results = p.map(self._parse_blocks, blocks)
         except (ValueError, IndexError, AttributeError) as e:
             raise ParseError(f'Failed to parse workers\' logs: {e}')
         sizes, self.received_samples = zip(*results)
@@ -103,7 +103,7 @@ class LogParser:
 
         return proposals, commits
 
-    def _parse_workers(self, log):
+    def _parse_blocks(self, log):
         if search(r'(?:panic|Error)', log) is not None:
             raise ParseError('Worker(s) panicked')
 
@@ -140,7 +140,7 @@ class LogParser:
         start, end = min(self.start), max(self.commits.values())
 
         duration = end - start
-        print(f'Duration {duration}')
+
         bytes = sum(self.sizes.values()) * self.size[0]
         bps = bytes / duration
         tps = bps / self.size[0]
@@ -204,5 +204,9 @@ class LogParser:
         for filename in sorted(glob(join(directory, 'node-*.log'))):
             with open(filename, 'r') as f:
                 nodes += [f.read()]
+        blocks = []
+        for filename in sorted(glob(join(directory, 'block-*.log'))):
+            with open(filename, 'r') as f:
+                blocks += [f.read()]
 
-        return cls(clients, nodes, faults=faults)
+        return cls(clients, nodes, blocks, faults=faults)

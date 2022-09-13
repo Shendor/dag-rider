@@ -157,10 +157,10 @@ impl VertexAggregator {
             }
         } else {
             warn!("Not all parents found in the storage for vertex '{}'. Start to synchronize...", vertex.encoded_hash());
-            // self.vertex_sync_sender
-            //     .send(SyncMessage::SyncParentVertices(missing_vertices, vertex.clone()))
-            //     .await
-            //     .expect("Failed to send sync parents request");
+            self.vertex_sync_sender
+                .send(SyncMessage::SyncParentVertices(missing_vertices, vertex.clone()))
+                .await
+                .expect("Failed to send sync parents request");
             Ok(true)
         }
     }

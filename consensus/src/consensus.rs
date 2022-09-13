@@ -71,12 +71,12 @@ impl Consensus {
                 // the last committed leader, and commit all preceding leaders in the right order. Committing
                 // a leader block means committing all its dependencies.
                 if self.state.get_votes_for_vertex(&leader.hash(), &round) < self.committee.validity_threshold() {
-                    warn!("Leader {} does not have enough support", leader.encoded_hash());
+                    warn!("Leader {} does not have enough support", leader.encoded_owner());
                     continue;
                 }
 
                 // Get an ordered list of past leaders that are linked to the current leader.
-                debug!("Leader {} has enough support", leader.encoded_hash());
+                debug!("Leader {} has enough support", leader.encoded_owner());
                 for l in self.order_leaders(&leader).iter().rev() {
                     // Order vertices starting from the oldest leader
                     self.order_dag(l);
@@ -106,7 +106,7 @@ impl Consensus {
     fn order_leaders(&self, leader: &Vertex) -> Vec<Vertex> {
         let mut to_commit = vec![leader.clone()];
         let mut leader = leader;
-        for r in (self.state.last_committed_round + 2..leader.round()).rev().step_by(2)
+        for r in (self.state.last_committed_round + 2..leader.round() - 1).rev().step_by(2)
         {
             // Get the vertex proposed by the previous leader.
             let prev_leader = match self.leader(r) {
@@ -144,6 +144,7 @@ impl Consensus {
                 }
             }
         }
+        self.state.set_vertex_as_delivered(&leader.hash(), &leader.round());
     }
 
     async fn notify_gc(&mut self, leader: &Vertex) {

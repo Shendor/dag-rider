@@ -8,7 +8,7 @@ class CommandMaker:
     @staticmethod
     def cleanup():
         return (
-            f'rm -r .db-* ; rm .*.json ; mkdir -p {PathMaker.results_path()}'
+            f'rm -r db-* ; rm .*.json ; mkdir -p {PathMaker.results_path()}'
         )
 
     @staticmethod
@@ -20,28 +20,16 @@ class CommandMaker:
         return 'cargo build --quiet --release --features benchmark'
 
     @staticmethod
-    def run_primary(keys, committee, store, parameters, debug=False):
-        assert isinstance(keys, str)
+    def run_node(id, committee, store):
         assert isinstance(committee, str)
-        assert isinstance(parameters, str)
-        assert isinstance(debug, bool)
-        v = '-vvv' if debug else '-vv'
-        return (f'./node {v} run --keys {keys} --committee {committee} '
-                f'--store {store} --parameters {parameters} primary')
+        return (f'./node run --id {id} --committee {committee} '
+                f'--store {store} consensus')
 
     @staticmethod
-    def run_worker(keys, committee, store, parameters, id, debug=False):
-        assert isinstance(keys, str)
+    def run_block_service(id, committee, store):
         assert isinstance(committee, str)
-        assert isinstance(parameters, str)
-        assert isinstance(debug, bool)
-        v = '-vvv' if debug else '-vv'
-        return (f'./node {v} run --keys {keys} --committee {committee} '
-                f'--store {store} --parameters {parameters} worker --id {id}')
-
-    @staticmethod
-    def run_node(id, committee_file):
-        return f'./node run --id {id} --committee {committee_file}'
+        return (f'./node run --id {id} --committee {committee} '
+                f'--store {store} block')
 
     @staticmethod
     def run_client(address, rate, nodes):

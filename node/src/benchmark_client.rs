@@ -146,34 +146,3 @@ impl Client {
             .await;
     }
 }
-
-/*impl Client {
-    pub async fn send(&self) -> Result<()> {
-        const TRANSACTION_COUNT: u64 = 200;
-        const TX_SIZE: usize = 64;
-
-        let stream = TcpStream::connect(self.target)
-            .await
-            .context(format!("failed to connect to {}", self.target))?;
-
-        let mut tx = BytesMut::with_capacity(TX_SIZE);
-        let mut transport = Framed::new(stream, LengthDelimitedCodec::new());
-
-        info!("Start sending transactions");
-
-        for c in 0..TRANSACTION_COUNT {
-            info!("Sending sample transaction {}", c);
-
-            tx.put_u8(0u8); // Sample txs start with 0.
-            tx.put_u64(c); // This counter identifies the tx.
-            // tx.resize(TX_SIZE, 0u8);
-            let bytes = tx.split().freeze();
-
-            transport.send(bytes).await?;
-            sleep(Duration::from_millis(100));
-        }
-
-        Ok(())
-    }
-}
-*/

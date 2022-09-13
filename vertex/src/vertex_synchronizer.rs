@@ -131,7 +131,7 @@ impl VertexSynchronizer {
                             }
                             if !vertices_to_sync.is_empty() {
                                 let address = self.committee
-                                    .get_node_address_by_key(&owner)
+                                    .get_vertex_address_by_key(&owner)
                                     .expect("Vertex owner is not in committee");
                                 let message = VertexMessage::VertexRequest(vertices_to_sync, self.node_key);
                                 let bytes = bincode::serialize(&message).expect("Failed to serialize VertexRequest");
@@ -148,7 +148,7 @@ impl VertexSynchronizer {
                             let _ = self.parent_requests.remove(hash);
                         }
                         // Send missing vertex to the Vertex Aggregator
-                        self.vertex_sync_sender.send(vertex).await.expect("Failed to send vertex");
+                        // self.vertex_sync_sender.send(vertex).await.expect("Failed to send vertex");
                     },
                     Ok(None) => {
                         // This request has been canceled.
@@ -177,7 +177,7 @@ impl VertexSynchronizer {
                     }
 
                     if !vertices_to_retry.is_empty() {
-                        let addresses = self.committee.get_node_addresses_but_me(&self.node_key);
+                        let addresses = self.committee.get_vertex_addresses_but_me(&self.node_key);
                         let message = VertexMessage::VertexRequest(vertices_to_retry, self.node_key);
                         let bytes = bincode::serialize(&message).expect("Failed to serialize VertexRequest");
                         self.network.lucky_broadcast(addresses, Bytes::from(bytes), SYNC_RETRY_NODES).await;

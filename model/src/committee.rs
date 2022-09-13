@@ -9,22 +9,38 @@ pub type Id = u32;
 pub type NodePublicKey = [u8; 32];
 
 #[derive(Clone, Deserialize)]
-pub struct Validator {
-    pub address: SocketAddr,
+pub struct VertexServiceAddress {
+    pub vertex_address: SocketAddr,
+    pub block_proposal_address: SocketAddr,
+}
+
+#[derive(Clone, Deserialize)]
+pub struct BlockServiceAddress {
     pub tx_address: SocketAddr,
     pub block_address: SocketAddr,
+}
+
+#[derive(Clone, Deserialize)]
+pub struct Validator {
     pub public_key: NodePublicKey,
+    pub vertex_service_address: VertexServiceAddress,
+    pub block_service_address: BlockServiceAddress,
 }
 
 impl Validator {
-    pub fn new(keypair: &str, addr: &str, tx_addr: &str, block_addr: &str) -> Self {
+    pub fn new(keypair: &str, vertex_addr: &str, block_proposal_addr: &str, tx_addr: &str, block_addr: &str) -> Self {
         let keypair = Validator::create_keypair(String::from(keypair));
         let public_key = Validator::create_node_public_key_from(&keypair);
         Self {
-            address: addr.parse().unwrap(),
-            tx_address: tx_addr.parse().unwrap(),
-            block_address: block_addr.parse().unwrap(),
             public_key,
+            vertex_service_address: VertexServiceAddress {
+                vertex_address: vertex_addr.parse().unwrap(),
+                block_proposal_address: block_proposal_addr.parse().unwrap(),
+            },
+            block_service_address: BlockServiceAddress {
+                tx_address: tx_addr.parse().unwrap(),
+                block_address: block_addr.parse().unwrap(),
+            },
         }
     }
 
@@ -45,7 +61,6 @@ pub struct Committee {
 }
 
 impl Committee {
-
     pub fn from_file(path: &str) -> Self {
         let data = fs::read(path).expect("Failed to open committee file");
         let json: serde_json::Value =
@@ -57,7 +72,8 @@ impl Committee {
             validators.insert(key.parse::<Id>().unwrap(),
                               Validator::new(
                                   value.get("keypair").unwrap().as_str().unwrap(),
-                                  value.get("address").unwrap().as_str().unwrap(),
+                                  value.get("vertex_address").unwrap().as_str().unwrap(),
+                                  value.get("block_proposal_address").unwrap().as_str().unwrap(),
                                   value.get("tx_address").unwrap().as_str().unwrap(),
                                   value.get("block_address").unwrap().as_str().unwrap(),
                               ));
@@ -73,55 +89,65 @@ impl Committee {
     }
 
     pub fn quorum_threshold(&self) -> usize {
-        // self.size() - 1
-        self.size()
+        2 * self.size() / 3 + 1
     }
 
     /// Returns the stake required to reach availability (f+1).
     pub fn validity_threshold(&self) -> usize {
         // If N = 3f + 1 + k (0 <= k < 3)
         // then (N + 2) / 3 = f + 1 + k/3 = f + 1
-        // ((self.size() + 2) / 3) as usize
-        self.size()
+        ((self.size() + 2) / 3) as usize
     }
 
     pub fn get_node_address(&self, id: Id) -> Option<SocketAddr> {
         match self.validators.get(&id) {
-            Some(v) => Some(v.address),
+            Some(v) => Some(v.vertex_service_address.vertex_address),
             None => None
         }
     }
 
-    pub fn get_node_address_by_key(&self, node_key: &NodePublicKey) -> Option<SocketAddr> {
-        self.validators.iter().find(|(_, v)| v.public_key == *node_key).map(|(_, v)| v.address)
+    pub fn get_vertex_address_by_key(&self, node_key: &NodePublicKey) -> Option<SocketAddr> {
+        self.validators.iter().find(|(_, v)| v.public_key == *node_key).map(|(_, v)| v.vertex_service_address.vertex_address)
     }
 
-    pub fn get_node_addresses(&self) -> Vec<SocketAddr> {
-        self.validators.iter().map(|v| v.1.address).collect()
+    pub fn get_vertex_addresses(&self) -> Vec<SocketAddr> {
+        self.validators.iter().map(|v| v.1.vertex_service_address.vertex_address).collect()
     }
 
     pub fn get_tx_receiver_address(&self, id: Id) -> Option<SocketAddr> {
-        self.validators.get(&id).map(|v| v.tx_address)
+        self.validators.get(&id).map(|v| v.block_service_address.tx_address)
+    }
+
+    pub fn get_tx_receiver_address_by_key(&self, node_key: &NodePublicKey) -> Option<SocketAddr> {
+        self.validators.iter().find(|(_, v)| v.public_key == *node_key).map(|(_, v)| v.block_service_address.tx_address)
     }
 
     pub fn get_tx_receiver_addresses(&self) -> Vec<SocketAddr> {
-        self.validators.iter().map(|v| v.1.tx_address).collect()
+        self.validators.iter().map(|v| v.1.block_service_address.tx_address).collect()
     }
 
     pub fn get_block_receiver_address(&self, id: Id) -> Option<SocketAddr> {
-        self.validators.get(&id).map(|v| v.block_address)
+        self.validators.get(&id).map(|v| v.block_service_address.block_address)
     }
 
-    pub fn get_block_receiver_address_by_key(&self, node_key: NodePublicKey) -> Option<SocketAddr> {
-        self.validators.iter().find(|(_, v)| v.public_key == node_key).map(|(_, v)| v.block_address)
+    pub fn get_block_receiver_address_by_key(&self, node_key: &NodePublicKey) -> Option<SocketAddr> {
+        self.validators.iter().find(|(_, v)| v.public_key == *node_key).map(|(_, v)| v.block_service_address.block_address)
+    }
+
+    pub fn get_block_proposal_address_by_key(&self, node_key: &NodePublicKey) -> Option<SocketAddr> {
+        self.validators.iter().find(|(_, v)| v.public_key == *node_key).map(|(_, v)| v.vertex_service_address.block_proposal_address)
     }
 
     pub fn get_block_receiver_addresses(&self) -> Vec<SocketAddr> {
-        self.validators.iter().map(|v| v.1.block_address).collect()
+        self.validators.iter().map(|v| v.1.block_service_address.block_address).collect()
     }
 
-    pub fn get_node_addresses_but_me(&self, node_key: &NodePublicKey) -> Vec<SocketAddr> {
-        self.validators.iter().filter(|(_, v)| v.public_key != *node_key).map(|v| v.1.address).collect()
+    pub fn get_block_receiver_addresses_but_me(&self, node_key: &NodePublicKey) -> Vec<SocketAddr> {
+        self.validators.iter().filter(|(_, v)| v.public_key != *node_key).map(|v| v.1.block_service_address.block_address).collect()
+    }
+
+    pub fn get_vertex_addresses_but_me(&self, node_key: &NodePublicKey) -> Vec<SocketAddr> {
+        self.validators.iter().filter(|(_, v)| v.public_key != *node_key).map(|v| v.1.vertex_service_address.vertex_address).collect()
     }
 
     pub fn get_nodes_keys(&self) -> Vec<NodePublicKey> {

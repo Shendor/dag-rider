@@ -38,7 +38,7 @@ class Committee:
         addresses = []
         good_nodes = self.size() - faults
         for validator in list(self.json['validators'].values())[:good_nodes]:
-            addresses += [validator['address']]
+            addresses += [validator['vertex_address']]
         return addresses
 
     def tx_addresses(self, faults=0):
@@ -64,9 +64,10 @@ class Committee:
         ips = set()
         for name in names:
             validators = self.json['validators'][name]
-            ips.add(self.ip(validators['address']))
+            ips.add(self.ip(validators['vertex_address']))
             ips.add(self.ip(validators['tx_address']))
             ips.add(self.ip(validators['block_address']))
+            ips.add(self.ip(validators['block_proposal_address']))
 
         return list(ips)
 
@@ -102,12 +103,6 @@ class BenchParameters:
         try:
             self.faults = int(json['faults'])
 
-            nodes = json['nodes']
-            nodes = nodes if isinstance(nodes, list) else [nodes]
-            if not nodes or any(x <= 1 for x in nodes):
-                raise ConfigError('Missing or invalid number of nodes')
-            self.nodes = [int(x) for x in nodes]
-
             rate = json['rate']
             rate = rate if isinstance(rate, list) else [rate]
             if not rate:
@@ -132,9 +127,6 @@ class BenchParameters:
 
         except ValueError:
             raise ConfigError('Invalid parameters type')
-
-        if min(self.nodes) <= self.faults:
-            raise ConfigError('There should be more nodes than faults')
 
 
 class PlotParameters:

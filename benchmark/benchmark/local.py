@@ -42,7 +42,7 @@ class LocalBench:
 
         try:
             Print.info('Setting up testbed...')
-            nodes, rate = self.nodes[0], self.rate[0]
+            rate = self.rate[0]
 
             # Cleanup all files.
             cmd = f'{CommandMaker.clean_logs()} ; {CommandMaker.cleanup()}'
@@ -62,7 +62,7 @@ class LocalBench:
 
             # Run the clients (they will wait for the nodes to be ready).
             tx_addresses = committee.tx_addresses(self.faults)
-            rate_share = ceil(rate / committee.workers())
+            rate_share = ceil(rate / len(tx_addresses))
             for (id, address) in tx_addresses:
                 cmd = CommandMaker.run_client(
                     address,
@@ -72,9 +72,20 @@ class LocalBench:
                 log_file = PathMaker.client_log_file(int(id), int(id))
                 self._background_run(cmd, log_file)
 
-            # Run the primaries (except the faulty ones).
             for id in range(1, committee.size() + 1):
-                cmd = CommandMaker.run_node(id, committee_file)
+                cmd = CommandMaker.run_block_service(
+                    id,
+                    committee_file,
+                    PathMaker.db_path(id),
+                )
+                log_file = PathMaker.block_log_file(id)
+                self._background_run(cmd, log_file)
+
+            for id in range(1, committee.size() + 1):
+                cmd = CommandMaker.run_node(id,
+                                            committee_file,
+                                            PathMaker.db_path(id),
+                                            )
                 log_file = PathMaker.node_log_file(id)
                 self._background_run(cmd, log_file)
 

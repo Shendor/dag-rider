@@ -19,7 +19,7 @@ pub struct Storage {
     channel: Sender<StoreCommand>,
 }
 
-impl Storage {
+/*impl Storage {
     pub fn new(starting_records: HashMap<Key, Value>) -> StoreResult<Self> {
         let mut db : HashMap<Key, Value> = HashMap::new();
 
@@ -93,11 +93,15 @@ impl Storage {
             .await
             .expect("Failed to receive reply to NotifyRead command from store")
     }
-}
+}*/
 
-/*impl Storage {
-    pub fn new(path: &str) -> StoreResult<Self> {
+impl Storage {
+    pub fn new(path: &str, genesis: HashMap<Vec<u8>, Vec<u8>>) -> StoreResult<Self> {
         let db = rocksdb::DB::open_default(path)?;
+        for v in genesis {
+            db.put(v.0, v.1);
+        }
+
         let mut obligations = HashMap::<_, VecDeque<oneshot::Sender<_>>>::new();
         let (tx, mut rx) = channel(100);
         tokio::spawn(async move {
@@ -162,4 +166,4 @@ impl Storage {
             .await
             .expect("Failed to receive reply to NotifyRead command from store")
     }
-}*/
+}

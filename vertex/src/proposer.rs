@@ -14,7 +14,7 @@ use network::{CancelHandler, ReliableSender};
 use crate::vertex_message_handler::VertexMessage;
 
 /// The maximum delay to wait for blocks.
-const MAX_VERTEX_DELAY: u64 = 5000;
+const MAX_VERTEX_DELAY: u64 = 1000;
 
 /// The proposer creates new vertices and send them to the VertexAggregator for further processing.
 pub struct Proposer {
@@ -87,7 +87,8 @@ impl Proposer {
             let enough_parents = !self.last_parents.is_empty();
             let timer_expired = timer.is_elapsed();
 
-            if (timer_expired || (!self.blocks.is_empty() && can_proceed)) && enough_parents {
+            // if (timer_expired || (!self.blocks.is_empty() && can_proceed)) && enough_parents {
+            if (timer_expired || (self.blocks.len() >= 2 && can_proceed)) && enough_parents {
                 if timer_expired {
                     warn!("Timer expired for round {}", self.round);
                 }
@@ -161,14 +162,19 @@ impl Proposer {
             debug!("New block proposed: {}", base64::encode(block_hash));
         }
 
-        let addresses = self.committee.get_node_addresses();
-        let bytes = bincode::serialize(&VertexMessage::NewVertex(vertex))
+        let addresses = self.committee.get_vertex_addresses_but_me(&self.node_key);
+        let bytes = bincode::serialize(&VertexMessage::NewVertex(vertex.clone()))
             .expect("Failed to serialize the new vertex");
         let handler = self.network.broadcast(addresses, Bytes::from(bytes)).await;
         self.cancel_handlers
             .entry(self.round)
             .or_insert_with(Vec::new)
             .extend(handler);
+
+        self.proposed_vertex_sender
+            .send(vertex)
+            .await
+            .expect("Failed to send vertex to Vertex Aggregator")
     }
 
     /// Update the last leader.
@@ -216,6 +222,9 @@ impl Proposer {
             }
         }
         enough_votes |= no_votes >= self.committee.validity_threshold();
+        if !enough_votes {
+            warn!("Not enough votes for leader: {}", votes_for_leader)
+        }
         enough_votes
     }
 }

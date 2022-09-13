@@ -11,15 +11,14 @@ def local(ctx, debug=True):
     ''' Run benchmarks on localhost '''
     bench_params = {
         'faults': 0,
-        'nodes': 4,
         'workers': 1,
-        'rate': 1500,
+        'rate': 110000,
         'tx_size': 512,
         'duration': 20,
     }
 
     try:
-        ret = LocalBench(bench_params).run('/home/shendor/projects/dag-rider/benchmark/full_committee.json', debug)
+        ret = LocalBench(bench_params).run('/home/shendor/projects/dag-rider/benchmark/committee_10.json', debug)
         print(ret.result())
     except BenchError as e:
         Print.error(e)

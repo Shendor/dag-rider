@@ -27,6 +27,9 @@ async fn main() -> Result<()> {
                 .about("Run a node")
                 .args_from_usage("--id=<INT> 'Node id'")
                 .args_from_usage("--committee=<FILE> 'The file containing committee information'")
+                .args_from_usage("--store=<PATH> 'The path where to create the data store'")
+                .subcommand(SubCommand::with_name("consensus").about("Run Consensus service"))
+                .subcommand(SubCommand::with_name("block").about("Run Block service"))
         )
         .get_matches();
 
@@ -46,38 +49,42 @@ async fn run(matches: &ArgMatches<'_>) -> Result<()> {
 
     let (consensus_sender, consensus_receiver) = channel::<Vertex>(DEFAULT_CHANNEL_CAPACITY);
     let (gc_round_sender, gc_round_receiver) = tokio::sync::broadcast::channel::<Round>(DEFAULT_CHANNEL_CAPACITY);
-    let (block_sender, block_receiver) = channel::<BlockHash>(DEFAULT_CHANNEL_CAPACITY);
 
     let committee = Committee::from_file(committee_file);
 
-    let genesis = Vertex::genesis(committee.get_nodes_keys()).iter()
+    let genesis = Vertex::genesis(committee.get_nodes_keys())
+        .iter()
         .map(|v| (v.hash().to_vec(), bincode::serialize(v).expect("Failed to serialize vertex")))
         .collect::<HashMap<Vec<u8>, Vec<u8>>>();
-    // let storage = Storage::new(matches.value_of("store").unwrap()).context("Failed to create the storage")?;
-    let storage = Storage::new(genesis).context("Failed to create the storage")?;
+    let storage = Storage::new(matches.value_of("store").unwrap(), genesis).context("Failed to create the storage")?;
     let node_key = committee.get_node_key(node_id).expect(format!("Node public key not found for the id {}", node_id).as_str());
 
-    TransactionService::spawn(
-        node_id,
-        committee.clone(),
-        storage.clone(),
-        block_sender,
-    );
+    match matches.subcommand() {
+        ("consensus", _) => {
+            VertexService::spawn(
+                node_key,
+                committee.clone(),
+                storage,
+                consensus_sender,
+                gc_round_sender.subscribe(),
+            );
 
-    VertexService::spawn(
-        node_key,
-        committee.clone(),
-        storage,
-        consensus_sender,
-        gc_round_sender.subscribe(),
-        block_receiver
-    );
+            Consensus::spawn(
+                committee,
+                consensus_receiver,
+                GarbageCollector::new(gc_round_sender),
+            );
+        }
 
-    Consensus::spawn(
-        committee,
-        consensus_receiver,
-        GarbageCollector::new(gc_round_sender)
-    );
+        ("block", _) => {
+            TransactionService::spawn(
+                node_key,
+                committee.clone(),
+                storage.clone(),
+            );
+        }
+        _ => unreachable!(),
+    }
 
     wait_and_print_gc_rounds(gc_round_receiver).await;
     // Ok(())

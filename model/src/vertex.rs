@@ -38,6 +38,7 @@ impl Vertex {
         let hash = blake3::hash(&encoded).as_bytes().clone();
         Self {
             hash,
+            timestamp: SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis(),
             ..vertex
         }
     }

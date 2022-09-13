@@ -1,33 +1,39 @@
 use std::time::Duration;
 use bytes::Bytes;
 use log::{info, debug};
-use tokio::sync::mpsc::{Receiver};
+use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::{Instant, sleep};
 
-use model::block::{Block, Transaction};
-use model::committee::Committee;
+use model::block::{Block, BlockHash, Transaction};
+use model::committee::{Committee, NodePublicKey};
 use network::ReliableSender;
 use crate::handler::BlockMessage;
 
 const TX_SIZE: usize = 1000;
-const MAX_TX_COUNT_WAIT: u64 = 5000;
+const MAX_TX_COUNT_WAIT: u64 = 200;
 
 pub struct BlockBuilder {
+    node_key: NodePublicKey,
     committee: Committee,
     transaction_receiver: Receiver<Transaction>,
+    serialized_block_sender: Sender<(BlockHash, Vec<u8>, NodePublicKey)>,
     current_transactions: Vec<Transaction>,
     network: ReliableSender,
 }
 
 impl BlockBuilder {
     pub fn spawn(
+        node_key: NodePublicKey,
         transaction_receiver: Receiver<Transaction>,
+        serialized_block_sender: Sender<(BlockHash, Vec<u8>, NodePublicKey)>,
         committee: Committee,
     ) {
         tokio::spawn(async move {
             Self {
+                node_key,
                 committee,
                 transaction_receiver,
+                serialized_block_sender,
                 current_transactions: vec![],
                 network: ReliableSender::new(),
             }
@@ -43,7 +49,7 @@ impl BlockBuilder {
         loop {
             tokio::select! {
                 Some(transaction) = self.transaction_receiver.recv() => {
-                    debug!("BlockBuilder received transaction");
+                    // debug!("BlockBuilder received transaction");
                     self.current_transactions.push(transaction);
 
                     if self.current_transactions.len() >= TX_SIZE {
@@ -56,6 +62,7 @@ impl BlockBuilder {
                 // When time runs out, build a block with remaining transactions in the queue
                 () = &mut timer => {
                     if !self.current_transactions.is_empty() {
+                         debug!("Block time runs out");
                          self.build_block().await;
                     }
                     timer.as_mut().reset(Self::get_reset_time());
@@ -93,16 +100,17 @@ impl BlockBuilder {
             info!("Block {} contains {} transactions", block_hash, size);
         }
 
-        let message = BlockMessage::Block(block);
+        let block_hash = block.hash();
+        let message = BlockMessage::Block(self.node_key, block);
         let serialized = bincode::serialize(&message).expect("Failed to serialize the block");
 
         // Broadcast the block through the network.
-        let is_transferred = self.network.broadcast_and_wait(self.committee.get_block_receiver_addresses(),
-                                                             Bytes::from(serialized),
+        let is_transferred = self.network.broadcast_and_wait(self.committee.get_block_receiver_addresses_but_me(&self.node_key),
+                                                             Bytes::from(serialized.clone()),
                                                              self.committee.quorum_threshold()).await;
 
         if is_transferred {
-            info!("Block has been broadcast")
+            self.serialized_block_sender.send((block_hash, serialized.to_vec(), self.node_key)).await;
         }
     }
 

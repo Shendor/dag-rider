@@ -5,7 +5,7 @@ use model::{Round, Timestamp};
 use model::vertex::Vertex;
 
 /// Everything older than 3 sec must be cleaned up.
-const GC_DELTA_TIME: Timestamp = 30000;
+const GC_DELTA_TIME: Timestamp = 2000;
 
 /// Receives the highest round reached by consensus and update it for all tasks.
 pub struct GarbageCollector {
