@@ -1,45 +1,52 @@
 {
   "validators": {
     "1": {
-      "address": "0.0.0.0:3011",
+      "vertex_address": "0.0.0.0:3011",
       "tx_address": "0.0.0.0:3021",
       "block_address": "0.0.0.0:3031",
+      "block_proposal_address": "0.0.0.0:3041",
       "keypair": "ad7f2ee3958a7f3fa2c84931770f5773ef7694fdd0bb217d90f29a94199c9d7307ca3851515c89344639fe6a4077923068d1d7fc6106701213c61d34ef8e9416"
     },
     "2": {
-      "address": "0.0.0.0:3012",
+      "vertex_address": "0.0.0.0:3012",
       "tx_address": "0.0.0.0:3022",
       "block_address": "0.0.0.0:3032",
+      "block_proposal_address": "0.0.0.0:3042",
       "keypair": "5a353c630d3faf8e2d333a0983c1c71d5e9b6aed8f4959578fbeb3d3f3172886393b576de0ac1fe86a4dd416cf032543ac1bd066eb82585f779f6ce21237c0cd"
     },
     "3": {
-      "address": "0.0.0.0:3013",
+      "vertex_address": "0.0.0.0:3013",
       "tx_address": "0.0.0.0:3023",
       "block_address": "0.0.0.0:3033",
+      "block_proposal_address": "0.0.0.0:3043",
       "keypair": "6f4b736b9a6894858a81696d9c96cbdacf3d49099d212213f5abce33da18716f067f8a2b9aeb602cd4163291ebbf39e0e024634f3be19bde4c490465d9095a6b"
     },
     "4": {
-      "address": "0.0.0.0:3014",
+      "vertex_address": "0.0.0.0:3014",
       "tx_address": "0.0.0.0:3024",
       "block_address": "0.0.0.0:3034",
+      "block_proposal_address": "0.0.0.0:3044",
       "keypair": "3ae38eec96146c241f6cadf01995af14f027b23b8fecbc77dbc2e3ed5fec6fc3fb4fe5534f7affc9a8f1d99e290fdb91cc26777edd6fae480cad9f735d1b3680"
     },
     "5": {
-      "address": "0.0.0.0:3015",
+      "vertex_address": "0.0.0.0:3015",
       "tx_address": "0.0.0.0:3025",
       "block_address": "0.0.0.0:3035",
+      "block_proposal_address": "0.0.0.0:3045",
       "keypair": "c3cf7ec135b58170e25ecb5e81acadd666953ce51287ea6c177806eac47425954ebd520fa20d22646df059ba86609162d53d84cb8fd7e1adff8f948d9ff05e0f"
     },
     "6": {
-      "address": "0.0.0.0:3016",
+      "vertex_address": "0.0.0.0:3016",
       "tx_address": "0.0.0.0:3026",
       "block_address": "0.0.0.0:3036",
+      "block_proposal_address": "0.0.0.0:3046",
       "keypair": "69582069adb66423c3982f18d1ec72bf47afc119a348f4027dc64e5c3adbd2b335278912cd7aacfc230596fde13fed52be7c45b0786885a32255ea9d009fb4e8"
     },
     "7": {
-      "address": "0.0.0.0:3017",
+      "vertex_address": "0.0.0.0:3017",
       "tx_address": "0.0.0.0:3027",
       "block_address": "0.0.0.0:3037",
+      "block_proposal_address": "0.0.0.0:3047",
       "keypair": "bbde3a8529bd0fb824b758acfa6aaddcab1f3e585511da0b86a49c97654f36c9cdb8ce295725eb5eeb23c5241445b16bce03e48fdb3c0da3f67b44343ce35106"
     }
   }
